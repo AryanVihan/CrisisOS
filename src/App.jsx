@@ -6,6 +6,7 @@ import SensorGrid from './components/SensorGrid/SensorGrid.jsx'
 import SeverityGauge from './components/SeverityGauge/SeverityGauge.jsx'
 import AlertFeed from './components/AlertFeed/AlertFeed.jsx'
 import { useCrisisSimulation } from './hooks/useCrisisSimulation.js'
+import AgentOrchestrator from './components/AgentPanel/AgentOrchestrator.jsx'
 
 function formatTime(d) {
   return d.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })
@@ -407,6 +408,7 @@ export default function App() {
           onFloorChange={sim.setActiveFloor}
         />
         <RightPanel sim={sim} onStartScenario={sim.startSimulation} />
+        <AgentOrchestrator sim={sim} />
       </div>
     </div>
   )

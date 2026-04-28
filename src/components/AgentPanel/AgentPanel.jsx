@@ -58,6 +58,7 @@ const AGENTS = [
 function StatusBadge({ status, accent }) {
   const cfg = {
     STANDBY:   { label: 'STANDBY',   bg: 'rgba(148,163,184,0.08)', color: '#64748b' },
+    ACTIVE:    { label: 'ACTIVE',    bg: 'rgba(59,130,246,0.12)', color: '#3b82f6', pulse: true },
     ANALYZING: { label: 'ANALYZING', bg: `rgba(245,158,11,0.15)`,  color: '#f59e0b', pulse: true },
     COMPLETE:  { label: 'COMPLETE',  bg: 'rgba(34,197,94,0.15)',   color: '#22c55e' },
   }

@@ -130,6 +130,21 @@ html, body, #root {
   background: rgba(148, 163, 184, 0.4);
 }
 
+.agent-cursor {
+  display: inline-block;
+  width: 1px;
+  height: 1em;
+  vertical-align: bottom;
+  background: #cbd5e1;
+  margin-left: 2px;
+  animation: blink 1.1s steps(1) infinite;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
 /* ── Utility Glow Classes ─────────────────────────────────── */
 .glow-red   { text-shadow: 0 0 12px rgba(239, 68, 68, 0.7); }
 .glow-amber { text-shadow: 0 0 12px rgba(245, 158, 11, 0.7); }
