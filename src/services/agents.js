@@ -1,11 +1,8 @@
-import Anthropic from '@anthropic-ai/sdk'
-
-const API_KEY = import.meta.env.VITE_ANTHROPIC_API_KEY
-const MODEL = 'claude-opus-4-5'
-
-const client = API_KEY
-  ? new Anthropic({ apiKey: API_KEY, dangerouslyAllowBrowser: true })
-  : null
+// Live LLM streaming is intentionally disabled in this build — calling the
+// Anthropic API directly from the browser would expose the API key. The
+// app falls back to the curated narratives below, which keep the demo flow
+// fully functional without any external service.
+const client = null
 
 // ── Fallback responses ─────────────────────────────────────────────────────
 

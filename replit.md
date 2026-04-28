@@ -7,7 +7,7 @@ Emergency Response System — a React + Vite single-page application that visual
 - **Framework**: React 18 with Vite 5
 - **Styling**: Tailwind CSS + PostCSS + Autoprefixer
 - **Animation**: Framer Motion
-- **AI**: `@anthropic-ai/sdk` (used by services for crisis simulation)
+- **AI**: Pre-scripted narrative responses in `src/services/agents.js` (live LLM calls were removed during the Replit migration to avoid shipping API keys to the browser; a backend would be required to re-enable streaming)
 - **Language**: JavaScript (JSX)
 
 ## Project Layout
