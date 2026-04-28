@@ -15,6 +15,13 @@ import IncidentReviewPanel from './components/IncidentReview/IncidentReviewPanel
 import BeforeAfterComparison from './components/Comparison/BeforeAfterComparison.jsx'
 import CountdownOverlay from './components/Countdown/CountdownOverlay.jsx'
 import { useCountUp } from './hooks/useCountUp.js'
+import VoicePanel from './components/VoicePanel/VoicePanel.jsx'
+import CCTVGrid from './components/CCTVPanel/CCTVGrid.jsx'
+import QRBadge from './components/QR/QRBadge.jsx'
+import DemoController from './components/Demo/DemoController.jsx'
+import NarrationBar from './components/Demo/NarrationBar.jsx'
+import StatsOverlay from './components/Demo/StatsOverlay.jsx'
+import IntroSplash from './components/Demo/IntroSplash.jsx'
 
 function formatTime(d) {
   return d.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })
@@ -57,7 +64,6 @@ function Header({ time, date, status, elapsedSeconds, simulationStatus, onOpenRe
 
   return (
     <header className="relative z-10 flex items-center justify-between px-6 h-14 panel border-b border-t-0 border-x-0 shrink-0">
-      {/* Logo */}
       <div className="flex items-center gap-3">
         <div className="w-8 h-8 rounded bg-accent-red/20 border border-accent-red/50 flex items-center justify-center">
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
@@ -71,7 +77,6 @@ function Header({ time, date, status, elapsedSeconds, simulationStatus, onOpenRe
         </div>
       </div>
 
-      {/* Center */}
       <div className="absolute left-1/2 -translate-x-1/2 text-center hidden 2xl:block pointer-events-none">
         <div className="text-text-primary font-semibold text-sm tracking-wide">Horizon Grand Hotel</div>
         <div className="text-text-secondary text-xs">
@@ -82,9 +87,7 @@ function Header({ time, date, status, elapsedSeconds, simulationStatus, onOpenRe
         </div>
       </div>
 
-      {/* Right */}
       <div className="flex items-center gap-3">
-        {/* Drill Mode toggle */}
         <button
           onClick={onToggleDrill}
           className={`flex items-center gap-2 px-3 py-1.5 rounded border text-xs font-semibold uppercase tracking-widest transition-colors ${
@@ -98,7 +101,6 @@ function Header({ time, date, status, elapsedSeconds, simulationStatus, onOpenRe
           Drill Mode
         </button>
 
-        {/* Compare Response */}
         <button
           onClick={onOpenCompare}
           className="flex items-center gap-2 px-3 py-1.5 rounded border border-emerald-500/40 bg-emerald-500/10 text-emerald-300 text-xs font-semibold uppercase tracking-widest hover:bg-emerald-500/20 transition-colors"
@@ -143,7 +145,6 @@ function Header({ time, date, status, elapsedSeconds, simulationStatus, onOpenRe
   )
 }
 
-/* ── Animated stat tile (counts up/down) ──────────────────────── */
 function StatTile({ value, label, valueClass, flash }) {
   const animated = useCountUp(value)
   return (
@@ -162,7 +163,6 @@ function Sidebar({ sensors, staff, accountedGuests, crisisEvents, onSensorClick,
   const availableStaff = staff.filter(s => s.status === 'available').length
   const alertCount     = crisisEvents.filter(e => !e.acknowledged).length
 
-  // Beep flash on Active Alerts when count increases
   const prevAlertCount = useRef(alertCount)
   const [alertFlash, setAlertFlash] = useState(false)
   useEffect(() => {
@@ -178,8 +178,7 @@ function Sidebar({ sensors, staff, accountedGuests, crisisEvents, onSensorClick,
   const roleColor = { Security: 'text-accent-red', Medical: 'text-accent-green', Manager: 'text-accent-amber', Concierge: 'text-accent-blue', Housekeeping: 'text-text-secondary' }
 
   return (
-    <aside className="w-[280px] flex flex-col panel border-r border-l-0 border-y-0 relative z-10 shrink-0">
-      {/* Stats */}
+    <aside className="sidebar-collapsible w-[280px] flex flex-col panel border-r border-l-0 border-y-0 relative z-10 shrink-0">
       <div className="grid grid-cols-2 gap-px bg-white/5 border-b border-white/5 shrink-0">
         <StatTile value={onlineCount}    label="Sensors Online"   valueClass="text-accent-green" />
         <StatTile value={availableStaff} label="Staff Available"  valueClass="text-accent-amber" />
@@ -187,7 +186,6 @@ function Sidebar({ sensors, staff, accountedGuests, crisisEvents, onSensorClick,
         <StatTile value={alertCount}     label="Active Alerts"    valueClass={alertCount > 0 ? 'text-accent-red' : 'text-text-secondary'} flash={alertFlash} />
       </div>
 
-      {/* Tabs */}
       <div className="flex border-b border-white/5 shrink-0">
         {['sensors', 'staff'].map(tab => (
           <button key={tab} onClick={() => setActiveTab(tab)} className={`flex-1 py-2.5 text-xs font-semibold uppercase tracking-wider transition-colors ${
@@ -198,7 +196,6 @@ function Sidebar({ sensors, staff, accountedGuests, crisisEvents, onSensorClick,
         ))}
       </div>
 
-      {/* Content */}
       <div className="flex-1 overflow-hidden">
         {activeTab === 'sensors' ? (
           <SensorGrid
@@ -228,8 +225,8 @@ function Sidebar({ sensors, staff, accountedGuests, crisisEvents, onSensorClick,
         )}
       </div>
 
-      {/* Footer */}
-      <div className="border-t border-white/5 p-3 shrink-0">
+      <div className="border-t border-white/5 p-3 shrink-0 space-y-3">
+        <QRBadge path="/#/guest" label="Scan to open guest view" />
         <div className="scanning rounded bg-bg-primary/60 border border-white/5 p-2">
           <div className="text-text-secondary text-xs">Sensor sweep cycle</div>
           <div className="text-accent-blue text-xs font-mono mt-0.5">— scanning all floors —</div>
@@ -278,8 +275,7 @@ function RightPanel({ sim, onStartScenario }) {
   }
 
   return (
-    <aside className="w-[320px] flex flex-col panel border-l border-r-0 border-y-0 relative z-10 shrink-0">
-      {/* Header */}
+    <aside className="right-panel-collapsible w-[320px] flex flex-col panel border-l border-r-0 border-y-0 relative z-10 shrink-0">
       <div className="px-4 py-2.5 border-b border-white/5 flex items-center justify-between shrink-0">
         <div>
           <div className="text-text-primary font-semibold text-sm">Crisis Intelligence</div>
@@ -293,12 +289,10 @@ function RightPanel({ sim, onStartScenario }) {
         </div>
       </div>
 
-      {/* Severity Gauge */}
       <div className="border-b border-white/5 shrink-0 bg-bg-primary/30">
         <SeverityGauge score={sim.severityScore} />
       </div>
 
-      {/* Agent Status row */}
       <div className="grid grid-cols-2 gap-1 p-2 border-b border-white/5 shrink-0">
         {AGENT_STATUS.map(ag => {
           const running = agentRunning(ag.name)
@@ -315,8 +309,11 @@ function RightPanel({ sim, onStartScenario }) {
         })}
       </div>
 
-      {/* Tab switcher */}
-      <div className="flex border-b border-white/5 shrink-0">
+      <div className="px-2 pt-2 shrink-0">
+        <VoicePanel />
+      </div>
+
+      <div className="flex border-b border-white/5 shrink-0 mt-2">
         {[['alerts', 'ALERTS'], ['agents', 'AGENTS']].map(([key, label]) => (
           <button key={key} onClick={() => setTab(key)} className={`flex-1 py-2 text-[10px] font-semibold uppercase tracking-wider transition-colors ${
             tab === key ? 'text-accent-blue border-b-2 border-accent-blue' : 'text-text-secondary hover:text-text-primary'
@@ -329,7 +326,6 @@ function RightPanel({ sim, onStartScenario }) {
         ))}
       </div>
 
-      {/* Feed area */}
       <div className="flex-1 overflow-hidden">
         {tab === 'alerts' ? (
           <AlertFeed events={sim.crisisEvents} />
@@ -350,7 +346,6 @@ function RightPanel({ sim, onStartScenario }) {
         )}
       </div>
 
-      {/* Sim controls */}
       <div className="border-t border-white/5 p-3 shrink-0">
         {!isRunning ? (
           <div className="space-y-1.5">
@@ -396,6 +391,58 @@ function RightPanel({ sim, onStartScenario }) {
   )
 }
 
+/* ── Central Stage with tabs (Floor map / Surveillance / Thermal) ─ */
+function CentralStage({ sim, crisisZones, centralTab, setCentralTab }) {
+  const visionAgentActive = centralTab === 'surveillance' && (sim.severityScore >= 4 || sim.evacuationActive)
+
+  return (
+    <div className="central-stage flex-1 flex flex-col min-w-0 relative">
+      <div className="tab-strip">
+        <button className={centralTab === 'floor' ? 'active' : ''} onClick={() => setCentralTab('floor')}>
+          Floor Map
+        </button>
+        <button className={centralTab === 'surveillance' ? 'active' : ''} onClick={() => setCentralTab('surveillance')}>
+          Surveillance
+          {sim.evacuationActive && <span className="badge">LIVE</span>}
+        </button>
+        <button className={centralTab === 'thermal' ? 'active' : ''} onClick={() => setCentralTab('thermal')}>
+          Thermal
+        </button>
+      </div>
+      <div className="flex-1 overflow-hidden relative">
+        {centralTab === 'floor' && (
+          <FloorMap
+            sensors={sim.sensors}
+            guests={sim.guests}
+            staff={sim.staff}
+            crisisZones={crisisZones}
+            evacuationRoutes={EVACUATION_ROUTES}
+            isEvacuating={sim.evacuationActive}
+            activeFloor={sim.activeFloor}
+            onFloorChange={sim.setActiveFloor}
+          />
+        )}
+        {centralTab === 'surveillance' && (
+          <CCTVGrid
+            severity={sim.severityScore}
+            evacuationActive={sim.evacuationActive}
+            visionAgentActive={visionAgentActive}
+          />
+        )}
+        {centralTab === 'thermal' && (
+          <div className="h-full w-full flex flex-col items-center justify-center text-text-secondary">
+            <div className="text-[10px] uppercase tracking-[0.3em] text-accent-amber">Thermal imaging</div>
+            <div className="text-base mt-2">Module placeholder — coming in Phase 13.</div>
+            <div className="mt-4 text-[11px] max-w-md text-center">
+              Will overlay thermal heat-map data on top of the floor plan once IR cameras are integrated.
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 /* ── App Root ─────────────────────────────────────────────────── */
 export default function App() {
   const [time, setTime]               = useState(formatTime(new Date()))
@@ -411,7 +458,27 @@ export default function App() {
   const [drillMode, setDrillMode] = useState(false)
   const [countdownActive, setCountdownActive] = useState(false)
   const [pendingScenario, setPendingScenario] = useState(null)
+  const [centralTab, setCentralTab] = useState('floor')
+  const [demoVisible, setDemoVisible] = useState(true)
+  const [presentationMode, setPresentationMode] = useState(false)
+  const [statsVisible, setStatsVisible] = useState(true)
+  const [narrationVisible, setNarrationVisible] = useState(true)
+  const [introVisible, setIntroVisible] = useState(() => {
+    if (typeof window === 'undefined') return false
+    try {
+      if (window.location.hash.includes('skipIntro')) return false
+      return window.sessionStorage.getItem('crisisos:introSeen') !== '1'
+    } catch { return true }
+  })
+
   const sim = useCrisisSimulation()
+
+  const handleBridgeBrief = useCallback((brief, raw) => {
+    setBridgeBrief(brief)
+    setBridgeRawJson(raw ?? '')
+  }, [])
+  const handleStaffAssignments = useCallback((a) => setStaffAssignments(a), [])
+  const handleZoneCommunications = useCallback((z) => setZoneCommunications(z), [])
 
   const handleStartScenario = useCallback((scenarioName) => {
     setPendingScenario(scenarioName)
@@ -445,6 +512,28 @@ export default function App() {
     }
   }, [sim.simulationStatus])
 
+  // Auto-switch to surveillance during high-severity crises (one-shot)
+  const switchedToCCTV = useRef(false)
+  useEffect(() => {
+    if (sim.evacuationActive && !switchedToCCTV.current) {
+      switchedToCCTV.current = true
+      // Briefly show CCTV grid for dramatic effect
+      setCentralTab('surveillance')
+      const back = setTimeout(() => setCentralTab('floor'), 6000)
+      return () => clearTimeout(back)
+    }
+    if (!sim.evacuationActive && sim.simulationStatus === 'idle') {
+      switchedToCCTV.current = false
+    }
+  }, [sim.evacuationActive, sim.simulationStatus])
+
+  // Toggle presentation mode body class
+  useEffect(() => {
+    if (typeof document === 'undefined') return
+    document.body.classList.toggle('presentation-mode', presentationMode)
+    return () => document.body.classList.remove('presentation-mode')
+  }, [presentationMode])
+
   const crisisZones = useMemo(
     () => deriveCrisisZones(sim.crisisEvents, sim.activeFloor),
     [sim.crisisEvents, sim.activeFloor]
@@ -459,10 +548,8 @@ export default function App() {
 
   return (
     <div className="relative h-screen w-screen overflow-hidden bg-bg-primary flex flex-col">
-      {/* Animated grid background */}
       <div className="grid-bg" />
 
-      {/* Full-screen red flash when severity crosses 7 */}
       {sim.flashRed && (
         <div
           className="fixed inset-0 z-50 pointer-events-none"
@@ -473,7 +560,6 @@ export default function App() {
         />
       )}
 
-      {/* Header */}
       <Header
         time={time}
         date={date}
@@ -487,7 +573,6 @@ export default function App() {
         onToggleDrill={() => setDrillMode(v => !v)}
       />
 
-      {/* Drill Mode banner */}
       {drillMode && (
         <div className="relative z-10 flex items-center justify-center gap-3 px-6 py-2 border-b border-purple-500/30 bg-purple-500/15 text-purple-200 text-xs font-semibold uppercase tracking-[0.3em] shrink-0">
           <span className="w-2 h-2 rounded-full bg-purple-300 animate-pulse" />
@@ -496,7 +581,6 @@ export default function App() {
         </div>
       )}
 
-      {/* Body */}
       <div className="flex flex-1 overflow-hidden">
         <Sidebar
           sensors={sim.sensors}
@@ -506,27 +590,25 @@ export default function App() {
           onSensorClick={handleSensorClick}
           selectedSensorId={selectedSensor?.id}
         />
-        <FloorMap
-          sensors={sim.sensors}
-          guests={sim.guests}
-          staff={sim.staff}
+        <CentralStage
+          sim={sim}
           crisisZones={crisisZones}
-          evacuationRoutes={EVACUATION_ROUTES}
-          isEvacuating={sim.evacuationActive}
-          activeFloor={sim.activeFloor}
-          onFloorChange={sim.setActiveFloor}
+          centralTab={centralTab}
+          setCentralTab={setCentralTab}
         />
         <RightPanel sim={sim} onStartScenario={handleStartScenario} />
-        <AgentOrchestrator
-          sim={sim}
-          onBridgeBrief={(brief, raw) => { setBridgeBrief(brief); setBridgeRawJson(raw ?? '') }}
-          onStaffAssignments={setStaffAssignments}
-          onZoneCommunications={setZoneCommunications}
-        />
+        <div className="agent-orchestrator-panel">
+          <AgentOrchestrator
+            sim={sim}
+            onBridgeBrief={handleBridgeBrief}
+            onStaffAssignments={handleStaffAssignments}
+            onZoneCommunications={handleZoneCommunications}
+          />
+        </div>
       </div>
 
       {isCrisis && (
-        <section className="absolute inset-x-6 bottom-6 z-20 mx-auto max-w-[calc(100%-3rem)] rounded-[2rem] border border-white/10 bg-bg-secondary/95 shadow-2xl backdrop-blur-xl overflow-hidden ring-1 ring-white/5 slide-up">
+        <section className="crisis-bottom-panel absolute inset-x-6 bottom-6 z-20 mx-auto max-w-[calc(100%-3rem)] rounded-[2rem] border border-white/10 bg-bg-secondary/95 shadow-2xl backdrop-blur-xl overflow-hidden ring-1 ring-white/5 slide-up">
           <div className="flex flex-col gap-3 border-b border-white/10 bg-bg-secondary/90 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <div className="text-xs uppercase tracking-[0.3em] text-text-secondary">Phase 5 crisis panel</div>
@@ -560,7 +642,7 @@ export default function App() {
                 evacuationActive={sim.evacuationActive}
               />
             )}
-            {dashboardTab === 'zones' && <ZoneCommunications communications={zoneCommunications} />}
+            {dashboardTab === 'zones' && <ZoneCommunications communications={zoneCommunications} activeVoiceZone={sim.currentVoiceZone} />}
           </div>
         </section>
       )}
@@ -581,6 +663,30 @@ export default function App() {
       <CountdownOverlay
         active={countdownActive}
         onComplete={handleCountdownComplete}
+      />
+
+      {/* Phase 10 overlays */}
+      <NarrationBar visible={narrationVisible && isCrisis} sim={sim} />
+      <StatsOverlay visible={statsVisible && isCrisis} sim={sim} />
+      <DemoController
+        visible={demoVisible}
+        onToggleVisible={() => setDemoVisible(v => !v)}
+        sim={sim}
+        presentationMode={presentationMode}
+        onTogglePresentation={() => setPresentationMode(v => !v)}
+        statsVisible={statsVisible}
+        onToggleStats={() => setStatsVisible(v => !v)}
+        narrationVisible={narrationVisible}
+        onToggleNarration={() => setNarrationVisible(v => !v)}
+        onReplayIntro={() => setIntroVisible(true)}
+      />
+
+      <IntroSplash
+        visible={introVisible}
+        onDismiss={() => {
+          setIntroVisible(false)
+          try { window.sessionStorage.setItem('crisisos:introSeen', '1') } catch {}
+        }}
       />
     </div>
   )

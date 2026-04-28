@@ -1,6 +1,8 @@
-import { useState, useEffect, useRef, useCallback, useReducer } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { SENSORS as BASE_SENSORS, GUESTS as BASE_GUESTS, STAFF as BASE_STAFF } from '../data/hotelData.js'
 import { ALL_SCENARIOS } from '../data/crisisScenarios.js'
+import simBus from '../services/simBus.js'
+import VoiceAnnouncer from '../services/voiceAnnouncer.js'
 
 /* ── Helpers ─────────────────────────────────────────────────── */
 const SENSOR_UNITS = { smoke: 'density', temperature: '°C', motion: 'persons', co2: 'ppm' }
@@ -81,6 +83,26 @@ const INITIAL_LOGS = [
   { id: 6, time: '00:00:09', agent: 'CrisisOrchestrator', msg: 'System ready. Awaiting scenario trigger.', level: 'success' },
 ]
 
+/* ── Voice milestone definitions ───────────────────────────── */
+const VOICE_MILESTONES = [
+  { t: 1, zone: 'all', priority: 'calm',
+    text: 'We are conducting a precautionary safety check. Please remain calm and await further instructions from hotel staff.' },
+  { t: 18, zone: 'all', priority: 'critical',
+    text: 'Emergency alert. An emergency has been detected on Floor 3. All guests please begin evacuating the building immediately. Do not use elevators. Proceed to the nearest stairwell.' },
+  { t: 22, zone: 'Floor 3 guests', priority: 'critical',
+    text: 'Please evacuate immediately using Stairwell A. Do not use Stairwell B or the elevators. Staff are guiding you to safety.' },
+  { t: 23, zone: 'guests on Floors 1 and 2', priority: 'calm',
+    text: 'Please proceed calmly to the main exit. Use the central stairwell. Hotel staff are available to assist you.' },
+  { t: 24, zone: 'lobby guests', priority: 'calm',
+    text: 'Please exit the building through the main entrance. Move away from the building and await instructions from emergency services.' },
+  { t: 31, zone: 'all', priority: 'calm',
+    text: 'Emergency services have been notified and are on their way. Estimated arrival in four minutes. Please continue evacuating calmly.' },
+  { t: 75, zone: 'all', priority: 'calm',
+    text: 'All guests have been successfully evacuated. Thank you for your cooperation. Emergency services are on scene.' },
+]
+
+const SPEED_INTERVAL_MS = { 1: 1000, 2: 500, 4: 250 }
+
 /* ── Hook ────────────────────────────────────────────────────── */
 export function useCrisisSimulation() {
   const [simulationStatus, setSimulationStatus] = useState('idle')
@@ -95,6 +117,15 @@ export function useCrisisSimulation() {
   const [agentLogs, setAgentLogs]               = useState(INITIAL_LOGS)
   const [incidentTimeline, setIncidentTimeline] = useState([])
   const [flashRed, setFlashRed]                 = useState(false)
+  const [blockedExits, setBlockedExits]         = useState([])
+  const [simulationSpeed, setSpeed]             = useState(1)
+  const [aiDecisionsCount, setAIDecisions]      = useState(0)
+  const [messagesCount, setMessagesCount]       = useState(0)
+  const [staffCoordinatedCount, setStaffCoord]  = useState(0)
+  const [safetyCheckIns, setSafetyCheckIns]     = useState(0)
+  const [helpRequests, setHelpRequests]         = useState([])
+  const [activeScenario, setActiveScenario]     = useState(null)
+  const [currentVoiceZone, setCurrentVoiceZone] = useState('all')
 
   // Simulation metadata (no re-render needed)
   const scenarioRef        = useRef(null)
@@ -105,6 +136,15 @@ export function useCrisisSimulation() {
   const logIdRef           = useRef(100)
   const intervalRef        = useRef(null)
   const crisisEventsRef    = useRef([])
+  const firedVoiceRef      = useRef(new Set())
+  const speedRef           = useRef(1)
+
+  /* ── Speed control ──────────────────────────────────────── */
+  const setSimulationSpeed = useCallback((mult) => {
+    const safe = SPEED_INTERVAL_MS[mult] ? mult : 1
+    speedRef.current = safe
+    setSpeed(safe)
+  }, [])
 
   /* ── Tick ────────────────────────────────────────────────── */
   const tick = useCallback(() => {
@@ -114,6 +154,16 @@ export function useCrisisSimulation() {
     elapsedRef.current += 1
     const t = elapsedRef.current
     setElapsedSeconds(t)
+
+    // Voice milestones (only once per t, only after a scenario is loaded)
+    VOICE_MILESTONES.forEach(m => {
+      if (t === m.t && !firedVoiceRef.current.has(m.t)) {
+        firedVoiceRef.current.add(m.t)
+        setCurrentVoiceZone(m.zone)
+        VoiceAnnouncer.announceZone(m.zone, m.text, m.priority)
+        setMessagesCount(c => c + 1)
+      }
+    })
 
     const newEvents = scenario.timeline.filter(
       ev => ev.t === t && !triggeredRef.current.has(`${ev.t}-${ev.sensorId}`)
@@ -168,6 +218,7 @@ export function useCrisisSimulation() {
         setEvacuationActive(true)
         setAccountedGuests(247)
         setSimulationStatus('crisis')
+        setStaffCoord(8)
         newLogs.push(
           { id: logIdRef.current++, time: formatElapsed(t), agent: 'EvacPlanner',       msg: `EVACUATION INITIATED — ${triggerFloor}. All staff deploy to exits.`, level: 'critical' },
           { id: logIdRef.current++, time: formatElapsed(t), agent: 'CrisisOrchestrator', msg: 'All agents switching to CRISIS mode. Incident command activated.', level: 'critical' },
@@ -183,6 +234,7 @@ export function useCrisisSimulation() {
         templates.forEach(fn => {
           newLogs.push({ id: logIdRef.current++, ...fn(ev), time: formatElapsed(t) })
         })
+        setAIDecisions(c => c + Math.max(1, templates.length))
       })
     }
 
@@ -208,7 +260,7 @@ export function useCrisisSimulation() {
     if (newLogs.length) {
       setAgentLogs(prev => [...prev, ...newLogs].slice(-60))
     }
-  }, []) // tick deps are all refs — stable
+  }, [simulationStatus])
 
   /* ── Controls ────────────────────────────────────────────── */
   const startSimulation = useCallback((scenarioName) => {
@@ -219,7 +271,9 @@ export function useCrisisSimulation() {
     evacuationStartRef.current = null
     prevSeverityRef.current    = 0
     crisisEventsRef.current    = []
+    firedVoiceRef.current      = new Set()
 
+    setActiveScenario(scenario.name)
     setSensors(initSensors())
     setCrisisEvents([])
     setElapsedSeconds(0)
@@ -230,6 +284,13 @@ export function useCrisisSimulation() {
     setIncidentTimeline([])
     setFlashRed(false)
     setSimulationStatus('running')
+    setAIDecisions(0)
+    setMessagesCount(0)
+    setStaffCoord(0)
+    setSafetyCheckIns(0)
+    setHelpRequests([])
+    setBlockedExits([])
+    setCurrentVoiceZone('all')
     setAgentLogs([
       ...INITIAL_LOGS,
       { id: logIdRef.current++, time: '00:00:00', agent: 'CrisisOrchestrator', msg: `Scenario loaded: "${scenario.name}". Simulation starting…`, level: 'warning' },
@@ -244,7 +305,12 @@ export function useCrisisSimulation() {
     evacuationStartRef.current = null
     prevSeverityRef.current    = 0
     crisisEventsRef.current    = []
+    firedVoiceRef.current      = new Set()
+    speedRef.current           = 1
 
+    VoiceAnnouncer.cancel()
+
+    setActiveScenario(null)
     setSensors(initSensors())
     setCrisisEvents([])
     setElapsedSeconds(0)
@@ -256,6 +322,15 @@ export function useCrisisSimulation() {
     setFlashRed(false)
     setSimulationStatus('idle')
     setAgentLogs(INITIAL_LOGS)
+    setAIDecisions(0)
+    setMessagesCount(0)
+    setStaffCoord(0)
+    setSafetyCheckIns(0)
+    setHelpRequests([])
+    setBlockedExits([])
+    setSpeed(1)
+    setCurrentVoiceZone('all')
+    simBus.clearState()
   }, [])
 
   const triggerManualSOS = useCallback((floor, room) => {
@@ -273,6 +348,7 @@ export function useCrisisSimulation() {
       ...prev,
       { id: logIdRef.current++, time: formatElapsed(t), agent: 'CrisisOrchestrator', msg: `Manual SOS: ${room} on ${floor}.`, level: 'critical' },
     ])
+    setAIDecisions(c => c + 2)
   }, [])
 
   const acknowledgeAlert = useCallback((alertId) => {
@@ -280,19 +356,120 @@ export function useCrisisSimulation() {
     crisisEventsRef.current = crisisEventsRef.current.map(e => e.id === alertId ? { ...e, acknowledged: true } : e)
   }, [])
 
-  /* ── Interval management ─────────────────────────────────── */
+  const blockExit = useCallback((exitId) => {
+    setBlockedExits(prev => prev.includes(exitId) ? prev : [...prev, exitId])
+    const t = elapsedRef.current
+    setAgentLogs(prev => [
+      ...prev,
+      { id: logIdRef.current++, time: formatElapsed(t), agent: 'EvacPlanner', msg: `EXIT BLOCKED — ${exitId}. Recomputing routes and rerouting evacuees.`, level: 'critical' },
+      { id: logIdRef.current++, time: formatElapsed(t), agent: 'StaffCoordinator', msg: `Redirecting staff away from ${exitId} toward alternate routes.`, level: 'warning' },
+    ])
+    setAIDecisions(c => c + 2)
+  }, [])
+
+  const findAllGuests = useCallback(() => {
+    setAccountedGuests(251)
+    const t = elapsedRef.current
+    setAgentLogs(prev => [
+      ...prev,
+      { id: logIdRef.current++, time: formatElapsed(t), agent: 'GuestTracker', msg: 'All guests located. Full accountability: 251 / 251.', level: 'success' },
+    ])
+  }, [])
+
+  const seekToTime = useCallback((targetSeconds) => {
+    const target = Math.max(0, Math.min(120, Math.floor(targetSeconds)))
+    if (!scenarioRef.current) return
+    if (target === elapsedRef.current) return
+    if (target < elapsedRef.current) {
+      // Rewind: replay from current scenario
+      const name = scenarioRef.current.name
+      startSimulation(name)
+      // In next tick run forward to target
+      setTimeout(() => {
+        for (let i = 0; i < target; i++) tick()
+      }, 50)
+    } else {
+      const delta = target - elapsedRef.current
+      for (let i = 0; i < delta; i++) tick()
+    }
+  }, [startSimulation, tick])
+
+  const guestSafe = useCallback((label = 'Guest') => {
+    setSafetyCheckIns(c => c + 1)
+    const t = elapsedRef.current
+    setAgentLogs(prev => [
+      ...prev,
+      { id: logIdRef.current++, time: formatElapsed(t), agent: 'GuestTracker', msg: `${label} confirmed safe via mobile check-in.`, level: 'success' },
+    ])
+  }, [])
+
+  const guestNeedsHelp = useCallback((info = {}) => {
+    const t = elapsedRef.current
+    const entry = { id: `help-${Date.now()}`, t, ...info }
+    setHelpRequests(prev => [...prev, entry])
+    setAgentLogs(prev => [
+      ...prev,
+      { id: logIdRef.current++, time: formatElapsed(t), agent: 'CrisisOrchestrator', msg: `ASSISTANCE REQUEST — ${info.room ?? 'Mobile guest'} flagged need for physical help.`, level: 'critical' },
+    ])
+    setAIDecisions(c => c + 1)
+  }, [])
+
+  /* ── Interval management (speed-aware) ─────────────────── */
   useEffect(() => {
     const running = simulationStatus === 'running' || simulationStatus === 'crisis'
-    if (running && !intervalRef.current) {
-      intervalRef.current = setInterval(tick, 1000)
-    } else if (!running && intervalRef.current) {
+    if (intervalRef.current) {
       clearInterval(intervalRef.current)
       intervalRef.current = null
+    }
+    if (running) {
+      const interval = SPEED_INTERVAL_MS[simulationSpeed] ?? 1000
+      intervalRef.current = setInterval(tick, interval)
     }
     return () => {
       if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null }
     }
-  }, [simulationStatus, tick])
+  }, [simulationStatus, simulationSpeed, tick])
+
+  /* ── Cross-tab broadcast ───────────────────────────────── */
+  useEffect(() => {
+    simBus.publishState({
+      simulationStatus,
+      activeScenario,
+      elapsedSeconds,
+      severityScore,
+      evacuationActive,
+      accountedGuests,
+      activeFloor,
+      lastEvent: crisisEvents[crisisEvents.length - 1] ?? null,
+      crisisEventCount: crisisEvents.length,
+      currentVoiceZone,
+      blockedExits,
+      messagesCount,
+      aiDecisionsCount,
+      safetyCheckIns,
+      helpRequests,
+      updatedAt: Date.now(),
+    })
+  }, [simulationStatus, activeScenario, elapsedSeconds, severityScore, evacuationActive,
+      accountedGuests, activeFloor, crisisEvents, currentVoiceZone, blockedExits,
+      messagesCount, aiDecisionsCount, safetyCheckIns, helpRequests])
+
+  /* ── Subscribe to bus actions (from /guest, /staff tabs) ── */
+  useEffect(() => {
+    const unsub = simBus.subscribe((msg) => {
+      if (!msg || msg.type !== 'action') return
+      const a = msg.payload
+      if (!a) return
+      if (a.kind === 'guest-sos') {
+        triggerManualSOS(a.floor || 'Floor 3', a.room || 'Room 312')
+      } else if (a.kind === 'guest-safe') {
+        guestSafe(a.label)
+      } else if (a.kind === 'guest-help') {
+        guestNeedsHelp(a.info ?? {})
+      }
+    })
+    return unsub
+  }, [triggerManualSOS, guestSafe, guestNeedsHelp])
 
   return {
     simulationStatus,
@@ -310,9 +487,24 @@ export function useCrisisSimulation() {
     agentLogs,
     incidentTimeline,
     flashRed,
+    blockedExits,
+    simulationSpeed,
+    aiDecisionsCount,
+    messagesCount,
+    staffCoordinatedCount,
+    safetyCheckIns,
+    helpRequests,
+    activeScenario,
+    currentVoiceZone,
     startSimulation,
     resetSimulation,
     triggerManualSOS,
     acknowledgeAlert,
+    blockExit,
+    findAllGuests,
+    seekToTime,
+    setSimulationSpeed,
+    guestSafe,
+    guestNeedsHelp,
   }
 }

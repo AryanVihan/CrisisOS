@@ -1,4 +1,5 @@
-import React, { useMemo } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
+import VoiceAnnouncer from '../../services/voiceAnnouncer.js'
 
 const ZONE_LIST = [
   { id: 'Lobby', label: 'Lobby' },
@@ -72,7 +73,26 @@ const defaults = {
   },
 }
 
-export default function ZoneCommunications({ communications = [] }) {
+function zoneMatches(activeZone, zoneId) {
+  if (!activeZone) return false
+  const a = activeZone.toLowerCase()
+  const z = zoneId.toLowerCase()
+  if (a.includes('all')) return true
+  if (a.includes('lobby') && z === 'lobby') return true
+  if (a.includes('floor 3') && z.startsWith('floor 3')) return true
+  if (a.includes('floors 1') && (z === 'floor 1' || z === 'floor 2')) return true
+  if (z.includes(a)) return true
+  return false
+}
+
+export default function ZoneCommunications({ communications = [], activeVoiceZone = null }) {
+  const [voiceState, setVoiceState] = useState({
+    speaking: VoiceAnnouncer.isSpeaking(),
+    currentMessage: VoiceAnnouncer.currentMessage(),
+  })
+  useEffect(() => VoiceAnnouncer.subscribe(setVoiceState), [])
+  const liveZone = voiceState.currentMessage?.zone ?? activeVoiceZone
+
   const zoneMap = useMemo(() => {
     const map = {}
     communications.forEach((item) => {
@@ -99,16 +119,28 @@ export default function ZoneCommunications({ communications = [] }) {
         {ZONE_LIST.map((zone) => {
           const data = zoneMap[zone.id] ?? defaults[zone.id]
           const style = typeStyles[data.type] || typeStyles.calm
+          const isLive = voiceState.speaking && zoneMatches(liveZone, zone.id)
           return (
-            <div key={zone.id} className="rounded-3xl border border-white/10 bg-bg-primary/80 p-4">
+            <div key={zone.id} className={`rounded-3xl border p-4 transition ${
+              isLive ? 'border-accent-blue/60 bg-accent-blue/5 shadow-[0_0_0_1px_rgba(59,130,246,0.4)]' : 'border-white/10 bg-bg-primary/80'
+            }`}>
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <div className="text-xs uppercase tracking-[0.3em] text-text-secondary">{zone.label}</div>
-                  <div className="text-sm font-semibold text-white">{data.type.toUpperCase()}</div>
+                  <div className="text-sm font-semibold text-white">{isLive ? 'BROADCASTING' : data.type.toUpperCase()}</div>
                 </div>
-                <div className="relative flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white">
-                  <span className="block h-3.5 w-3.5 rounded-full bg-white/70" />
-                  <span className="speaker-wave absolute -inset-1 rounded-full" />
+                <div className="flex items-center gap-2">
+                  {isLive && (
+                    <div className="flex items-end gap-0.5 h-5" aria-label="speaking">
+                      {[0, 1, 2, 3].map(i => (
+                        <span key={i} className="w-1 rounded-sm bg-accent-blue eq-bar" style={{ animationDelay: `${i * 0.1}s` }} />
+                      ))}
+                    </div>
+                  )}
+                  <div className="relative flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white">
+                    <span className="block h-3.5 w-3.5 rounded-full bg-white/70" />
+                    <span className="speaker-wave absolute -inset-1 rounded-full" />
+                  </div>
                 </div>
               </div>
               <div className={`mt-3 rounded-2xl border px-3 py-3 text-sm ${style}`}>{data.message}</div>
