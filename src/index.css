@@ -165,3 +165,41 @@ html, body, #root {
   15%  { opacity: 1; }
   100% { opacity: 0; }
 }
+
+@keyframes slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.slide-up {
+  animation: slide-up 0.36s ease-out forwards;
+}
+
+@keyframes speaker-wave {
+  0% {
+    transform: scale(0.9);
+    opacity: 0.45;
+  }
+  50% {
+    transform: scale(1.2);
+    opacity: 0.08;
+  }
+  100% {
+    transform: scale(1.5);
+    opacity: 0;
+  }
+}
+
+.speaker-wave {
+  position: absolute;
+  inset: -4px;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.25);
+  animation: speaker-wave 1.5s ease-out infinite;
+}

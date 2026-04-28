@@ -5,6 +5,10 @@ import FloorMap from './components/FloorMap/FloorMap.jsx'
 import SensorGrid from './components/SensorGrid/SensorGrid.jsx'
 import SeverityGauge from './components/SeverityGauge/SeverityGauge.jsx'
 import AlertFeed from './components/AlertFeed/AlertFeed.jsx'
+import ResponderBrief from './components/ResponderBrief/ResponderBrief.jsx'
+import DispatchBoard from './components/DispatchBoard/DispatchBoard.jsx'
+import AccountabilityTracker from './components/AccountabilityTracker/AccountabilityTracker.jsx'
+import ZoneCommunications from './components/ZoneCommunications/ZoneCommunications.jsx'
 import { useCrisisSimulation } from './hooks/useCrisisSimulation.js'
 import AgentOrchestrator from './components/AgentPanel/AgentOrchestrator.jsx'
 
@@ -339,6 +343,11 @@ export default function App() {
   const [time, setTime]               = useState(formatTime(new Date()))
   const [date, setDate]               = useState(formatDate(new Date()))
   const [selectedSensor, setSelectedSensor] = useState(null)
+  const [bridgeBrief, setBridgeBrief] = useState(null)
+  const [bridgeRawJson, setBridgeRawJson] = useState('')
+  const [staffAssignments, setStaffAssignments] = useState([])
+  const [zoneCommunications, setZoneCommunications] = useState([])
+  const [dashboardTab, setDashboardTab] = useState('brief')
   const sim = useCrisisSimulation()
 
   useEffect(() => {
@@ -349,6 +358,16 @@ export default function App() {
     }, 1000)
     return () => clearInterval(id)
   }, [])
+
+  useEffect(() => {
+    if (sim.simulationStatus === 'idle') {
+      setBridgeBrief(null)
+      setBridgeRawJson('')
+      setStaffAssignments([])
+      setZoneCommunications([])
+      setDashboardTab('brief')
+    }
+  }, [sim.simulationStatus])
 
   const crisisZones = useMemo(
     () => deriveCrisisZones(sim.crisisEvents, sim.activeFloor),
@@ -408,8 +427,53 @@ export default function App() {
           onFloorChange={sim.setActiveFloor}
         />
         <RightPanel sim={sim} onStartScenario={sim.startSimulation} />
-        <AgentOrchestrator sim={sim} />
+        <AgentOrchestrator
+          sim={sim}
+          onBridgeBrief={(brief, raw) => { setBridgeBrief(brief); setBridgeRawJson(raw ?? '') }}
+          onStaffAssignments={setStaffAssignments}
+          onZoneCommunications={setZoneCommunications}
+        />
       </div>
+
+      {isCrisis && (
+        <section className="absolute inset-x-6 bottom-6 z-20 mx-auto max-w-[calc(100%-3rem)] rounded-[2rem] border border-white/10 bg-bg-secondary/95 shadow-2xl backdrop-blur-xl overflow-hidden ring-1 ring-white/5 slide-up">
+          <div className="flex flex-col gap-3 border-b border-white/10 bg-bg-secondary/90 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <div className="text-xs uppercase tracking-[0.3em] text-text-secondary">Phase 5 crisis panel</div>
+              <div className="text-base font-semibold text-white">Responder brief & dispatch dashboard</div>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {[
+                { key: 'brief', label: 'BRIEF' },
+                { key: 'dispatch', label: 'DISPATCH' },
+                { key: 'accountability', label: 'ACCOUNTABILITY' },
+                { key: 'zones', label: 'COMMUNICATIONS' },
+              ].map((tab) => (
+                <button
+                  key={tab.key}
+                  onClick={() => setDashboardTab(tab.key)}
+                  className={`rounded-full px-3 py-2 text-xs font-semibold uppercase tracking-[0.25em] transition ${dashboardTab === tab.key ? 'bg-white text-bg-primary' : 'bg-white/5 text-text-secondary hover:bg-white/10'}`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="max-h-[52vh] overflow-y-auto p-4">
+            {dashboardTab === 'brief' && <ResponderBrief brief={bridgeBrief} rawJson={bridgeRawJson} />}
+            {dashboardTab === 'dispatch' && <DispatchBoard assignments={staffAssignments} />}
+            {dashboardTab === 'accountability' && (
+              <AccountabilityTracker
+                accountedGuests={sim.accountedGuests}
+                totalGuests={251}
+                evacuationActive={sim.evacuationActive}
+              />
+            )}
+            {dashboardTab === 'zones' && <ZoneCommunications communications={zoneCommunications} />}
+          </div>
+        </section>
+      )}
     </div>
   )
 }
