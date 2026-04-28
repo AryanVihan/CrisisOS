@@ -3,14 +3,18 @@ import { AnimatePresence, motion } from 'framer-motion'
 import IncidentTimeline from '../Timeline/IncidentTimeline.jsx'
 import AuditLog from '../AuditLog/AuditLog.jsx'
 import IncidentMetrics from '../Metrics/IncidentMetrics.jsx'
+import CounterfactualSimulator from '../Counterfactual/CounterfactualSimulator.jsx'
+import PostIncidentReport from '../PostIncident/PostIncidentReport.jsx'
 
 const TABS = [
-  { key: 'timeline', label: 'Timeline' },
-  { key: 'audit',    label: 'Audit Log' },
-  { key: 'metrics',  label: 'Metrics' },
+  { key: 'timeline',       label: 'Timeline' },
+  { key: 'audit',          label: 'Audit Log' },
+  { key: 'metrics',        label: 'Metrics' },
+  { key: 'counterfactual', label: 'What-If' },
+  { key: 'report',         label: 'Report' },
 ]
 
-export default function IncidentReviewPanel({ open, onClose, sim }) {
+export default function IncidentReviewPanel({ open, onClose, sim, drillMode, onCompare }) {
   const [tab, setTab] = useState('timeline')
 
   // Close on Escape
@@ -63,6 +67,14 @@ export default function IncidentReviewPanel({ open, onClose, sim }) {
               </div>
 
               <div className="flex items-center gap-2">
+                {onCompare && (
+                  <button
+                    onClick={onCompare}
+                    className="px-3 py-1.5 rounded-md border border-emerald-500/40 bg-emerald-500/10 text-emerald-300 text-xs font-semibold uppercase tracking-widest hover:bg-emerald-500/20 transition-colors"
+                  >
+                    Compare Response
+                  </button>
+                )}
                 <div className="flex rounded-lg bg-white/5 border border-white/10 p-1">
                   {TABS.map((t) => (
                     <button
@@ -92,9 +104,11 @@ export default function IncidentReviewPanel({ open, onClose, sim }) {
 
             {/* Body */}
             <div className="flex-1 min-h-0 p-6">
-              {tab === 'timeline' && <IncidentTimeline sim={sim} />}
-              {tab === 'audit'    && <AuditLog sim={sim} />}
-              {tab === 'metrics'  && <IncidentMetrics sim={sim} />}
+              {tab === 'timeline'       && <IncidentTimeline sim={sim} />}
+              {tab === 'audit'          && <AuditLog sim={sim} />}
+              {tab === 'metrics'        && <IncidentMetrics sim={sim} />}
+              {tab === 'counterfactual' && <CounterfactualSimulator />}
+              {tab === 'report'         && <PostIncidentReport sim={sim} drillMode={drillMode} />}
             </div>
           </motion.section>
         </>

@@ -12,6 +12,7 @@ import ZoneCommunications from './components/ZoneCommunications/ZoneCommunicatio
 import { useCrisisSimulation } from './hooks/useCrisisSimulation.js'
 import AgentOrchestrator from './components/AgentPanel/AgentOrchestrator.jsx'
 import IncidentReviewPanel from './components/IncidentReview/IncidentReviewPanel.jsx'
+import BeforeAfterComparison from './components/Comparison/BeforeAfterComparison.jsx'
 
 function formatTime(d) {
   return d.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })
@@ -48,7 +49,7 @@ function deriveCrisisZones(crisisEvents, activeFloor) {
 }
 
 /* ── Header ───────────────────────────────────────────────────── */
-function Header({ time, date, status, elapsedSeconds, simulationStatus, onOpenReview, reviewBadgeCount }) {
+function Header({ time, date, status, elapsedSeconds, simulationStatus, onOpenReview, reviewBadgeCount, onOpenCompare, drillMode, onToggleDrill }) {
   const isCrisis  = status !== 'NOMINAL'
   const isRunning = simulationStatus === 'running' || simulationStatus === 'crisis'
 
@@ -69,7 +70,7 @@ function Header({ time, date, status, elapsedSeconds, simulationStatus, onOpenRe
       </div>
 
       {/* Center */}
-      <div className="absolute left-1/2 -translate-x-1/2 text-center">
+      <div className="absolute left-1/2 -translate-x-1/2 text-center hidden 2xl:block pointer-events-none">
         <div className="text-text-primary font-semibold text-sm tracking-wide">Horizon Grand Hotel</div>
         <div className="text-text-secondary text-xs">
           Emergency Response Command
@@ -80,7 +81,33 @@ function Header({ time, date, status, elapsedSeconds, simulationStatus, onOpenRe
       </div>
 
       {/* Right */}
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-3">
+        {/* Drill Mode toggle */}
+        <button
+          onClick={onToggleDrill}
+          className={`flex items-center gap-2 px-3 py-1.5 rounded border text-xs font-semibold uppercase tracking-widest transition-colors ${
+            drillMode
+              ? 'border-purple-400/60 bg-purple-500/15 text-purple-300 hover:bg-purple-500/25'
+              : 'border-white/15 bg-white/5 text-text-secondary hover:text-text-primary hover:bg-white/10'
+          }`}
+          title="Toggle Drill Mode"
+        >
+          <span className={`w-2 h-2 rounded-full ${drillMode ? 'bg-purple-300 animate-pulse' : 'bg-text-secondary/50'}`} />
+          Drill Mode
+        </button>
+
+        {/* Compare Response */}
+        <button
+          onClick={onOpenCompare}
+          className="flex items-center gap-2 px-3 py-1.5 rounded border border-emerald-500/40 bg-emerald-500/10 text-emerald-300 text-xs font-semibold uppercase tracking-widest hover:bg-emerald-500/20 transition-colors"
+          title="Compare CrisisOS response vs traditional"
+        >
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <path d="M7 1v12M3 4l4-3 4 3M3 10l4 3 4-3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+          Compare Response
+        </button>
+
         <button
           onClick={onOpenReview}
           className="flex items-center gap-2 px-3 py-1.5 rounded border border-accent-amber/40 bg-accent-amber/10 text-accent-amber text-xs font-semibold uppercase tracking-widest hover:bg-accent-amber/20 transition-colors"
@@ -366,6 +393,8 @@ export default function App() {
   const [zoneCommunications, setZoneCommunications] = useState([])
   const [dashboardTab, setDashboardTab] = useState('brief')
   const [reviewOpen, setReviewOpen] = useState(false)
+  const [compareOpen, setCompareOpen] = useState(false)
+  const [drillMode, setDrillMode] = useState(false)
   const sim = useCrisisSimulation()
 
   useEffect(() => {
@@ -424,7 +453,19 @@ export default function App() {
         simulationStatus={sim.simulationStatus}
         onOpenReview={() => setReviewOpen(true)}
         reviewBadgeCount={sim.incidentTimeline.length}
+        onOpenCompare={() => setCompareOpen(true)}
+        drillMode={drillMode}
+        onToggleDrill={() => setDrillMode(v => !v)}
       />
+
+      {/* Drill Mode banner */}
+      {drillMode && (
+        <div className="relative z-10 flex items-center justify-center gap-3 px-6 py-2 border-b border-purple-500/30 bg-purple-500/15 text-purple-200 text-xs font-semibold uppercase tracking-[0.3em] shrink-0">
+          <span className="w-2 h-2 rounded-full bg-purple-300 animate-pulse" />
+          Drill Mode Active — This is a Training Simulation
+          <span className="w-2 h-2 rounded-full bg-purple-300 animate-pulse" />
+        </div>
+      )}
 
       {/* Body */}
       <div className="flex flex-1 overflow-hidden">
@@ -499,6 +540,13 @@ export default function App() {
         open={reviewOpen}
         onClose={() => setReviewOpen(false)}
         sim={sim}
+        drillMode={drillMode}
+        onCompare={() => setCompareOpen(true)}
+      />
+
+      <BeforeAfterComparison
+        open={compareOpen}
+        onClose={() => setCompareOpen(false)}
       />
     </div>
   )
