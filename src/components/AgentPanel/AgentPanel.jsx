@@ -1,4 +1,5 @@
-import React, { useEffect, useRef } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
+import AgentFlowVisualizer from '../AgentFlow/AgentFlowVisualizer.jsx'
 
 // ── Agent config ───────────────────────────────────────────────────────────
 
@@ -282,7 +283,24 @@ function PipelineProgress({ currentStep }) {
 
 // ── Main AgentPanel ────────────────────────────────────────────────────────
 
-export default function AgentPanel({ outputs, statuses, timings, currentStep }) {
+export default function AgentPanel({
+  outputs, statuses, timings, currentStep,
+  severityScore = 0, edgeMode = false,
+}) {
+  const [view, setView] = useState('terminal')
+  const lastDefaultRef = useRef(null)
+
+  // Auto-select FLOW view when severity ≥ 5 (one-shot per crisis)
+  useEffect(() => {
+    if (severityScore >= 5 && lastDefaultRef.current !== 'flow') {
+      lastDefaultRef.current = 'flow'
+      setView('flow')
+    }
+    if (severityScore === 0) {
+      lastDefaultRef.current = null
+    }
+  }, [severityScore])
+
   return (
     <aside
       className="panel border-l border-r-0 border-y-0 relative z-10 shrink-0 flex flex-col"
@@ -302,26 +320,79 @@ export default function AgentPanel({ outputs, statuses, timings, currentStep }) 
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-          <div style={{ width: 5, height: 5, borderRadius: '50%', background: '#3b82f6', boxShadow: '0 0 6px #3b82f6' }} />
-          <span style={{ fontSize: 9, fontWeight: 700, color: '#3b82f6', letterSpacing: '0.1em' }}>ACTIVE</span>
+          {edgeMode ? (
+            <>
+              <div style={{ width: 5, height: 5, borderRadius: '50%', background: '#fb923c', boxShadow: '0 0 6px #fb923c' }} />
+              <span style={{ fontSize: 9, fontWeight: 700, color: '#fb923c', letterSpacing: '0.1em' }}>EDGE</span>
+            </>
+          ) : (
+            <>
+              <div style={{ width: 5, height: 5, borderRadius: '50%', background: '#3b82f6', boxShadow: '0 0 6px #3b82f6' }} />
+              <span style={{ fontSize: 9, fontWeight: 700, color: '#3b82f6', letterSpacing: '0.1em' }}>ACTIVE</span>
+            </>
+          )}
         </div>
       </div>
+
+      {/* View toggle */}
+      <div style={{ display: 'flex', borderBottom: '1px solid rgba(148,163,184,0.07)', flexShrink: 0 }}>
+        {[['terminal', 'TERMINAL VIEW'], ['flow', 'FLOW VIEW']].map(([k, label]) => (
+          <button
+            key={k}
+            onClick={() => setView(k)}
+            style={{
+              flex: 1, padding: '6px 0',
+              fontSize: 9, fontWeight: 700, letterSpacing: '0.12em',
+              color: view === k ? '#3b82f6' : '#475569',
+              background: view === k ? 'rgba(59,130,246,0.08)' : 'transparent',
+              borderBottom: view === k ? '2px solid #3b82f6' : '2px solid transparent',
+              transition: 'all 0.2s',
+            }}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {/* Edge fallback banner inside the panel */}
+      {edgeMode && (
+        <div style={{
+          padding: '6px 12px',
+          background: 'rgba(251,146,60,0.08)',
+          borderBottom: '1px solid rgba(251,146,60,0.2)',
+          fontSize: 9,
+          color: '#fb923c',
+          letterSpacing: '0.1em',
+        }}>
+          ⚡ EDGE PROTOCOL — cached decisions in use · no cloud round-trip
+        </div>
+      )}
 
       {/* Pipeline progress */}
       <PipelineProgress currentStep={currentStep} />
 
-      {/* Agent cards */}
-      <div className="flex-1 overflow-y-auto" style={{ padding: '10px 14px', display: 'flex', flexDirection: 'column', gap: 14 }}>
-        {AGENTS.map(agent => (
-          <AgentCard
-            key={agent.key}
-            agent={agent}
-            output={outputs[agent.key]}
-            status={statuses[agent.key]}
-            timing={timings[agent.key]}
+      {view === 'terminal' ? (
+        <div className="flex-1 overflow-y-auto" style={{ padding: '10px 14px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+          {AGENTS.map(agent => (
+            <AgentCard
+              key={agent.key}
+              agent={agent}
+              output={outputs[agent.key]}
+              status={statuses[agent.key]}
+              timing={timings[agent.key]}
+            />
+          ))}
+        </div>
+      ) : (
+        <div className="flex-1 overflow-y-auto">
+          <AgentFlowVisualizer
+            outputs={outputs}
+            statuses={statuses}
+            timings={timings}
+            currentStep={currentStep}
           />
-        ))}
-      </div>
+        </div>
+      )}
 
       {/* Footer */}
       <div style={{
@@ -330,7 +401,8 @@ export default function AgentPanel({ outputs, statuses, timings, currentStep }) 
         flexShrink: 0,
       }}>
         <div style={{ fontSize: 9, color: '#1e293b', textAlign: 'center', letterSpacing: '0.05em' }}>
-          claude-opus-4-5 · streaming · crisios v1.0
+          {edgeMode ? 'edge-llama · cached protocols · crisios v1.0'
+                    : 'claude-opus-4-5 · streaming · crisios v1.0'}
         </div>
       </div>
     </aside>

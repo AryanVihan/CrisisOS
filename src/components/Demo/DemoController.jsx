@@ -116,6 +116,36 @@ export default function DemoController({
             </div>
           </div>
 
+          {/* Edge / connectivity */}
+          <div>
+            <div className="text-[10px] uppercase tracking-widest text-text-secondary mb-1.5">Network resilience</div>
+            <div className="space-y-1">
+              {sim.connState?.mode === 'cloud' ? (
+                <button
+                  onClick={sim.simulateDisconnect}
+                  className="w-full py-1.5 rounded bg-amber-500/15 text-amber-300 border border-amber-400/30 text-[11px] hover:bg-amber-500/25"
+                >
+                  ⚡ Simulate Network Failure
+                </button>
+              ) : (
+                <button
+                  onClick={sim.simulateReconnect}
+                  className="w-full py-1.5 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-400/30 text-[11px] hover:bg-emerald-500/25"
+                >
+                  ☁ Restore Cloud Connection
+                </button>
+              )}
+              {sim.connState?.mode === 'cloud' && (
+                <button
+                  onClick={sim.simulateDegraded}
+                  className="w-full py-1.5 rounded bg-yellow-500/10 text-yellow-300 border border-yellow-400/20 text-[11px] hover:bg-yellow-500/20"
+                >
+                  ⚠ Simulate Degraded Conn
+                </button>
+              )}
+            </div>
+          </div>
+
           {/* Overlays */}
           <div>
             <div className="text-[10px] uppercase tracking-widest text-text-secondary mb-1.5">Overlays</div>

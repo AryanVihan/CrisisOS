@@ -192,6 +192,8 @@ export default function AgentOrchestrator({ sim, onBridgeBrief, onStaffAssignmen
     setCurrentStep(4)
   }
 
+  const edgeMode = sim.connState && sim.connState.mode !== 'cloud'
+
   return (
     <div className="w-[380px] flex flex-col panel border-l border-y-0 border-r-0 relative z-10 shrink-0">
       <AgentPanel
@@ -199,6 +201,8 @@ export default function AgentOrchestrator({ sim, onBridgeBrief, onStaffAssignmen
         statuses={statuses}
         timings={timings}
         currentStep={currentStep}
+        severityScore={sim.severityScore}
+        edgeMode={edgeMode}
       />
     </div>
   )

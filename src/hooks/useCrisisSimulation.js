@@ -3,6 +3,15 @@ import { SENSORS as BASE_SENSORS, GUESTS as BASE_GUESTS, STAFF as BASE_STAFF } f
 import { ALL_SCENARIOS } from '../data/crisisScenarios.js'
 import simBus from '../services/simBus.js'
 import VoiceAnnouncer from '../services/voiceAnnouncer.js'
+import { computeRiskSnapshot, PRE_ALERT_THRESHOLD, PRE_ACTIONS } from '../services/riskPredictor.js'
+import {
+  THERM_CAMERAS,
+  makeAllGrids,
+  diffuse,
+  sourcesFor,
+  hottestCell,
+} from '../services/thermalSim.js'
+import connectivity from '../services/connectivityManager.js'
 
 /* ── Helpers ─────────────────────────────────────────────────── */
 const SENSOR_UNITS = { smoke: 'density', temperature: '°C', motion: 'persons', co2: 'ppm' }
@@ -127,6 +136,28 @@ export function useCrisisSimulation() {
   const [activeScenario, setActiveScenario]     = useState(null)
   const [currentVoiceZone, setCurrentVoiceZone] = useState('all')
 
+  // Phase 13 — predictive risk
+  const [risk, setRisk] = useState(() => computeRiskSnapshot({}))
+  const [riskHistory, setRiskHistory] = useState(() => Array(60).fill(15))
+  const [preAlertActive, setPreAlertActive] = useState(false)
+  const [preAlertFiredAt, setPreAlertFiredAt] = useState(null) // seconds before crisis
+  const [preStageSeconds, setPreStageSeconds] = useState(0) // 0..60
+  const [preStageActive, setPreStageActive] = useState(false)
+
+  // Phase 14 — thermal
+  const [thermalGrids, setThermalGrids] = useState(() => makeAllGrids())
+  const [thermalAnomaly, setThermalAnomaly] = useState(0)
+  const [thermalAnomalyAt, setThermalAnomalyAt] = useState(null) // seconds before smoke trigger
+  const [thermalHistory, setThermalHistory] = useState(() => ({
+    'THERM-01': Array(90).fill(28),
+    'THERM-02': Array(90).fill(24),
+    'THERM-03': Array(90).fill(23),
+    'THERM-04': Array(90).fill(22),
+  }))
+
+  // Phase 17 — connectivity
+  const [connState, setConnState] = useState(() => connectivity.getState())
+
   // Simulation metadata (no re-render needed)
   const scenarioRef        = useRef(null)
   const elapsedRef         = useRef(0)
@@ -135,15 +166,120 @@ export function useCrisisSimulation() {
   const prevSeverityRef    = useRef(0)
   const logIdRef           = useRef(100)
   const intervalRef        = useRef(null)
+  const preStageIntervalRef = useRef(null)
   const crisisEventsRef    = useRef([])
   const firedVoiceRef      = useRef(new Set())
   const speedRef           = useRef(1)
+  const preStageRef        = useRef(0)
+  const preAlertRef        = useRef(false)
+  const thermalAnomalyRef  = useRef(0)
+  const thermalAnomalyAtRef = useRef(null)
 
   /* ── Speed control ──────────────────────────────────────── */
   const setSimulationSpeed = useCallback((mult) => {
     const safe = SPEED_INTERVAL_MS[mult] ? mult : 1
     speedRef.current = safe
     setSpeed(safe)
+  }, [])
+
+  /* ── Thermal tick (10 fps via rAF) ───────────────────── */
+  useEffect(() => {
+    let raf = null
+    let running = true
+    const loop = () => {
+      if (!running) return
+      const preStage = preStageRef.current
+      const crisisT = (simulationStatus === 'crisis' || simulationStatus === 'running')
+        ? elapsedRef.current
+        : -1
+      const grids = thermalGrids
+      let anomalyCam = null
+      let maxT = 0
+      THERM_CAMERAS.forEach((cam) => {
+        const grid = grids[cam.id]
+        if (!grid) return
+        const sources = sourcesFor(cam.id, preStage, crisisT)
+        diffuse(grid, sources, cam.baseline)
+        const hot = hottestCell(grid)
+        if (cam.id === 'THERM-01' && hot.t > maxT) {
+          maxT = hot.t
+          anomalyCam = cam.id
+        }
+      })
+      thermalAnomalyRef.current = maxT
+      setThermalAnomaly(maxT)
+      // Track when anomaly first crossed pre-alert threshold (42 °C)
+      if (!thermalAnomalyAtRef.current && maxT >= 42) {
+        thermalAnomalyAtRef.current = { preStage, crisisT }
+        setThermalAnomalyAt({ preStage, crisisT })
+      }
+      raf = setTimeout(loop, 100)
+    }
+    loop()
+    return () => { running = false; if (raf) clearTimeout(raf) }
+  }, [thermalGrids, simulationStatus])
+
+  /* ── Risk predictor + thermal history (1 Hz) ─────────── */
+  useEffect(() => {
+    const id = setInterval(() => {
+      const snap = computeRiskSnapshot({
+        sensors,
+        thermalAnomaly: thermalAnomalyRef.current,
+        preStageSeconds: preStageRef.current,
+        simulationStatus,
+      })
+      setRisk(snap)
+      setRiskHistory((prev) => [...prev.slice(1), snap.score])
+
+      // Thermal history per camera
+      setThermalHistory((prev) => {
+        const next = { ...prev }
+        THERM_CAMERAS.forEach((cam) => {
+          const grid = thermalGrids[cam.id]
+          if (!grid) return
+          const hot = hottestCell(grid)
+          next[cam.id] = [...prev[cam.id].slice(1), hot.t]
+        })
+        return next
+      })
+
+      // Pre-alert trigger
+      if (snap.score >= PRE_ALERT_THRESHOLD && !preAlertRef.current && simulationStatus !== 'idle') {
+        preAlertRef.current = true
+        setPreAlertActive(true)
+        // record when pre-alert fired relative to crisis start
+        const lead = simulationStatus === 'pre-crisis'
+          ? 60 - preStageRef.current
+          : 0
+        setPreAlertFiredAt(lead)
+        const t = elapsedRef.current
+        setAgentLogs((prev) => [
+          ...prev,
+          {
+            id: logIdRef.current++,
+            time: formatElapsed(Math.max(0, t)),
+            agent: 'ThreatAssessor',
+            msg: `PRE-ALERT — risk score ${snap.score}. Pre-positioning staff. ${PRE_ACTIONS[0]}.`,
+            level: 'warning',
+          },
+          {
+            id: logIdRef.current++,
+            time: formatElapsed(Math.max(0, t)),
+            agent: 'StaffCoordinator',
+            msg: PRE_ACTIONS[1] + '. ' + PRE_ACTIONS[3] + '.',
+            level: 'warning',
+          },
+        ])
+      }
+    }, 1000)
+    return () => clearInterval(id)
+  }, [sensors, thermalGrids, simulationStatus])
+
+  /* ── Connectivity tick + subscription ─────────────────── */
+  useEffect(() => {
+    const unsub = connectivity.subscribe(setConnState)
+    const id = setInterval(() => connectivity.tick(), 500)
+    return () => { unsub(); clearInterval(id) }
   }, [])
 
   /* ── Tick ────────────────────────────────────────────────── */
@@ -272,6 +408,12 @@ export function useCrisisSimulation() {
     prevSeverityRef.current    = 0
     crisisEventsRef.current    = []
     firedVoiceRef.current      = new Set()
+    preStageRef.current        = 0
+    preAlertRef.current        = false
+    thermalAnomalyRef.current  = 0
+    thermalAnomalyAtRef.current = null
+
+    const isFire = /fire/i.test(scenario.name)
 
     setActiveScenario(scenario.name)
     setSensors(initSensors())
@@ -283,7 +425,6 @@ export function useCrisisSimulation() {
     setDispatchedStaff([])
     setIncidentTimeline([])
     setFlashRed(false)
-    setSimulationStatus('running')
     setAIDecisions(0)
     setMessagesCount(0)
     setStaffCoord(0)
@@ -291,14 +432,34 @@ export function useCrisisSimulation() {
     setHelpRequests([])
     setBlockedExits([])
     setCurrentVoiceZone('all')
-    setAgentLogs([
-      ...INITIAL_LOGS,
-      { id: logIdRef.current++, time: '00:00:00', agent: 'CrisisOrchestrator', msg: `Scenario loaded: "${scenario.name}". Simulation starting…`, level: 'warning' },
-    ])
+    setPreAlertActive(false)
+    setPreAlertFiredAt(null)
+    setPreStageSeconds(0)
+    setThermalAnomaly(0)
+    setThermalAnomalyAt(null)
+    setThermalGrids(makeAllGrids())
+    setRiskHistory(Array(60).fill(15))
+
+    if (isFire) {
+      setPreStageActive(true)
+      setSimulationStatus('pre-crisis')
+      setAgentLogs([
+        ...INITIAL_LOGS,
+        { id: logIdRef.current++, time: '-01:00', agent: 'CrisisOrchestrator', msg: `Scenario loaded: "${scenario.name}". Predictive monitoring engaged — pre-crisis stage.`, level: 'info' },
+      ])
+    } else {
+      setPreStageActive(false)
+      setSimulationStatus('running')
+      setAgentLogs([
+        ...INITIAL_LOGS,
+        { id: logIdRef.current++, time: '00:00:00', agent: 'CrisisOrchestrator', msg: `Scenario loaded: "${scenario.name}". Simulation starting…`, level: 'warning' },
+      ])
+    }
   }, [])
 
   const resetSimulation = useCallback(() => {
     if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null }
+    if (preStageIntervalRef.current) { clearInterval(preStageIntervalRef.current); preStageIntervalRef.current = null }
     scenarioRef.current        = null
     elapsedRef.current         = 0
     triggeredRef.current       = new Set()
@@ -307,8 +468,13 @@ export function useCrisisSimulation() {
     crisisEventsRef.current    = []
     firedVoiceRef.current      = new Set()
     speedRef.current           = 1
+    preStageRef.current        = 0
+    preAlertRef.current        = false
+    thermalAnomalyRef.current  = 0
+    thermalAnomalyAtRef.current = null
 
     VoiceAnnouncer.cancel()
+    connectivity.reset()
 
     setActiveScenario(null)
     setSensors(initSensors())
@@ -330,6 +496,14 @@ export function useCrisisSimulation() {
     setBlockedExits([])
     setSpeed(1)
     setCurrentVoiceZone('all')
+    setPreStageActive(false)
+    setPreStageSeconds(0)
+    setPreAlertActive(false)
+    setPreAlertFiredAt(null)
+    setThermalAnomaly(0)
+    setThermalAnomalyAt(null)
+    setThermalGrids(makeAllGrids())
+    setRiskHistory(Array(60).fill(15))
     simBus.clearState()
   }, [])
 
@@ -430,6 +604,29 @@ export function useCrisisSimulation() {
     }
   }, [simulationStatus, simulationSpeed, tick])
 
+  /* ── Pre-crisis stage interval ─────────────────────────── */
+  useEffect(() => {
+    if (preStageIntervalRef.current) {
+      clearInterval(preStageIntervalRef.current)
+      preStageIntervalRef.current = null
+    }
+    if (simulationStatus === 'pre-crisis') {
+      const interval = SPEED_INTERVAL_MS[simulationSpeed] ?? 1000
+      preStageIntervalRef.current = setInterval(() => {
+        preStageRef.current += 1
+        setPreStageSeconds(preStageRef.current)
+        if (preStageRef.current >= 60) {
+          // Transition into the actual scenario timeline
+          setPreStageActive(false)
+          setSimulationStatus('running')
+        }
+      }, interval)
+    }
+    return () => {
+      if (preStageIntervalRef.current) { clearInterval(preStageIntervalRef.current); preStageIntervalRef.current = null }
+    }
+  }, [simulationStatus, simulationSpeed])
+
   /* ── Cross-tab broadcast ───────────────────────────────── */
   useEffect(() => {
     simBus.publishState({
@@ -506,5 +703,22 @@ export function useCrisisSimulation() {
     setSimulationSpeed,
     guestSafe,
     guestNeedsHelp,
+    // Phase 13 — predictive risk
+    risk,
+    riskHistory,
+    preAlertActive,
+    preAlertFiredAt,
+    preStageSeconds,
+    preStageActive,
+    // Phase 14 — thermal
+    thermalGrids,
+    thermalAnomaly,
+    thermalAnomalyAt,
+    thermalHistory,
+    // Phase 17 — connectivity
+    connState,
+    simulateDisconnect: () => connectivity.simulateDisconnect(),
+    simulateReconnect:  () => connectivity.simulateReconnect(),
+    simulateDegraded:   () => connectivity.simulateDegraded(),
   }
 }

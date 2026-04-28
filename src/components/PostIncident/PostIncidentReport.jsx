@@ -29,6 +29,21 @@ const PROTOCOL_GAPS = [
   'CO₂ sensor coverage on Floor 4 west wing is sparse — recommend adding two additional units to close the gap before next drill.',
 ]
 
+function Stat({ label, value, tone = 'blue' }) {
+  const toneMap = {
+    purple: { border: 'border-purple-400/30', bg: 'bg-purple-500/10', text: 'text-purple-300' },
+    amber:  { border: 'border-amber-400/30',  bg: 'bg-amber-500/10',  text: 'text-amber-300'  },
+    blue:   { border: 'border-accent-blue/30', bg: 'bg-accent-blue/10', text: 'text-accent-blue' },
+  }
+  const t = toneMap[tone] || toneMap.blue
+  return (
+    <div className={`rounded-lg border ${t.border} ${t.bg} px-3 py-2`}>
+      <div className="text-[9px] uppercase tracking-[0.18em] text-text-secondary">{label}</div>
+      <div className={`mt-1 text-base font-mono font-semibold ${t.text}`}>{value}</div>
+    </div>
+  )
+}
+
 const TRAINING_FOCUS = [
   'Marshal handoff: practise transferring command between Coordination Agent and on-site Incident Commander once responders arrive.',
   'Floor 3 east wing micro-drills focused on Stairwell B routing and elevator lockout procedure.',
@@ -141,6 +156,92 @@ export default function PostIncidentReport({ sim, drillMode }) {
             </tbody>
           </table>
         </div>
+
+        {/* Predictive accuracy (Phase 13/14) */}
+        {(sim.preAlertFiredAt != null || sim.thermalAnomalyAt) && (
+          <div className="rounded-xl border border-purple-400/25 bg-purple-500/5 p-4">
+            <div className="text-[10px] uppercase tracking-[0.3em] text-purple-300">Predictive accuracy</div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3">
+              <Stat
+                label="Pre-alert lead time"
+                value={
+                  sim.preAlertFiredAt != null
+                    ? `+${Math.max(0, Math.round(60 - sim.preAlertFiredAt))} s`
+                    : '—'
+                }
+                tone="purple"
+              />
+              <Stat
+                label="Risk peak"
+                value={`${Math.round(sim.risk?.score ?? 0)}/100`}
+                tone="purple"
+              />
+              <Stat
+                label="Thermal anomaly"
+                value={
+                  sim.thermalAnomalyAt
+                    ? `+${Math.max(0, Math.round(60 - sim.thermalAnomalyAt.preStage))} s`
+                    : '—'
+                }
+                tone="amber"
+              />
+              <Stat
+                label="Detection bias"
+                value={
+                  sim.preAlertFiredAt != null
+                    ? 'Predictive (pre-event)'
+                    : 'Reactive (post-event)'
+                }
+                tone="purple"
+              />
+            </div>
+            <p className="mt-3 text-[11px] text-text-secondary leading-relaxed">
+              CrisisOS issued a pre-alert <span className="text-purple-300 font-semibold">
+              {sim.preAlertFiredAt != null
+                ? `${Math.round(60 - sim.preAlertFiredAt)} seconds before`
+                : 'concurrent with'}</span> the
+              first hard sensor trip. Independent thermal anomaly was detected
+              {sim.thermalAnomalyAt
+                ? ` ${Math.round(60 - sim.thermalAnomalyAt.preStage)} s ahead of smoke detection`
+                : ' — no anomaly during this run'}.
+              Composite lead time enabled pre-positioning of staff before guest impact.
+            </p>
+          </div>
+        )}
+
+        {/* System resilience (Phase 17) */}
+        {(sim.connState && (sim.connState.edgeDuration > 0 || sim.connState.mode !== 'cloud')) && (
+          <div className="rounded-xl border border-orange-400/25 bg-orange-500/5 p-4">
+            <div className="text-[10px] uppercase tracking-[0.3em] text-orange-300">System resilience</div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3">
+              <Stat
+                label="Time on edge"
+                value={`${Math.round(sim.connState.edgeDuration || 0)} s`}
+                tone="amber"
+              />
+              <Stat
+                label="Edge latency"
+                value={`${sim.connState.edgeLatencyMs || 12} ms`}
+                tone="amber"
+              />
+              <Stat
+                label="Pending sync"
+                value={`${sim.connState.pendingSync?.length || 0} events`}
+                tone="amber"
+              />
+              <Stat
+                label="Connection mode"
+                value={(sim.connState.mode || 'cloud').toUpperCase()}
+                tone="amber"
+              />
+            </div>
+            <p className="mt-3 text-[11px] text-text-secondary leading-relaxed">
+              When cloud connectivity dropped, CrisisOS automatically failed-over to cached edge protocols
+              with sub-second decision latency. No detection or evacuation step was lost; queued events
+              will sync to the central database on reconnect.
+            </p>
+          </div>
+        )}
 
         {/* Two-column qualitative analysis */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">

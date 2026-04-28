@@ -22,6 +22,10 @@ import DemoController from './components/Demo/DemoController.jsx'
 import NarrationBar from './components/Demo/NarrationBar.jsx'
 import StatsOverlay from './components/Demo/StatsOverlay.jsx'
 import IntroSplash from './components/Demo/IntroSplash.jsx'
+import RiskMonitor, { RiskHeaderChip } from './components/RiskMonitor/RiskMonitor.jsx'
+import ThermalGrid from './components/Thermal/ThermalGrid.jsx'
+import FloorMap3D from './components/FloorMap3D/FloorMap3D.jsx'
+import ConnectivityPanel, { ConnectivityChip, ConnectivityBanner } from './components/EdgeMode/ConnectivityPanel.jsx'
 
 function formatTime(d) {
   return d.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })
@@ -58,7 +62,7 @@ function deriveCrisisZones(crisisEvents, activeFloor) {
 }
 
 /* ── Header ───────────────────────────────────────────────────── */
-function Header({ time, date, status, elapsedSeconds, simulationStatus, onOpenReview, reviewBadgeCount, onOpenCompare, drillMode, onToggleDrill }) {
+function Header({ time, date, status, elapsedSeconds, simulationStatus, onOpenReview, reviewBadgeCount, onOpenCompare, drillMode, onToggleDrill, sim, onOpenRisk, onOpenConnectivity }) {
   const isCrisis  = status !== 'NOMINAL'
   const isRunning = simulationStatus === 'running' || simulationStatus === 'crisis'
 
@@ -88,6 +92,17 @@ function Header({ time, date, status, elapsedSeconds, simulationStatus, onOpenRe
       </div>
 
       <div className="flex items-center gap-3">
+        {sim && (
+          <RiskHeaderChip
+            score={sim.risk.score}
+            level={sim.risk.level}
+            preAlert={sim.preAlertActive}
+            onClick={onOpenRisk}
+          />
+        )}
+        {sim && (
+          <ConnectivityChip mode={sim.connState.mode} onClick={onOpenConnectivity} />
+        )}
         <button
           onClick={onToggleDrill}
           className={`flex items-center gap-2 px-3 py-1.5 rounded border text-xs font-semibold uppercase tracking-widest transition-colors ${
@@ -391,26 +406,48 @@ function RightPanel({ sim, onStartScenario }) {
   )
 }
 
-/* ── Central Stage with tabs (Floor map / Surveillance / Thermal) ─ */
-function CentralStage({ sim, crisisZones, centralTab, setCentralTab }) {
+/* ── Central Stage with tabs (Floor map / Surveillance / Thermal / Multi-Sensor) ─ */
+function CentralStage({ sim, crisisZones, centralTab, setCentralTab, mapMode, setMapMode, crisisFloor }) {
   const visionAgentActive = centralTab === 'surveillance' && (sim.severityScore >= 4 || sim.evacuationActive)
 
   return (
     <div className="central-stage flex-1 flex flex-col min-w-0 relative">
       <div className="tab-strip">
         <button className={centralTab === 'floor' ? 'active' : ''} onClick={() => setCentralTab('floor')}>
-          Floor Map
+          Floor
         </button>
         <button className={centralTab === 'surveillance' ? 'active' : ''} onClick={() => setCentralTab('surveillance')}>
-          Surveillance
+          CCTV
           {sim.evacuationActive && <span className="badge">LIVE</span>}
         </button>
         <button className={centralTab === 'thermal' ? 'active' : ''} onClick={() => setCentralTab('thermal')}>
           Thermal
+          {sim.thermalAnomaly >= 42 && <span className="badge">HOT</span>}
+        </button>
+        <button className={centralTab === 'multi' ? 'active' : ''} onClick={() => setCentralTab('multi')}>
+          Multi
         </button>
       </div>
+      {centralTab === 'floor' && (
+        <div className="flex items-center justify-end gap-1 px-3 py-1 border-b border-white/5 bg-bg-primary/40">
+          <span className="text-[9px] uppercase tracking-[0.2em] text-text-secondary mr-1">View:</span>
+          {[['2d', '2D'], ['3d', '3D ISO']].map(([k, label]) => (
+            <button
+              key={k}
+              onClick={() => setMapMode(k)}
+              className={`px-2 py-0.5 rounded text-[10px] font-bold tracking-widest transition ${
+                mapMode === k
+                  ? 'bg-accent-blue/25 text-accent-blue border border-accent-blue/40'
+                  : 'bg-white/5 text-text-secondary border border-white/10 hover:bg-white/10'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
       <div className="flex-1 overflow-hidden relative">
-        {centralTab === 'floor' && (
+        {centralTab === 'floor' && mapMode === '2d' && (
           <FloorMap
             sensors={sim.sensors}
             guests={sim.guests}
@@ -422,6 +459,14 @@ function CentralStage({ sim, crisisZones, centralTab, setCentralTab }) {
             onFloorChange={sim.setActiveFloor}
           />
         )}
+        {centralTab === 'floor' && mapMode === '3d' && (
+          <FloorMap3D
+            activeFloor={sim.activeFloor}
+            crisisFloor={crisisFloor}
+            evacuationActive={sim.evacuationActive}
+            severityScore={sim.severityScore}
+          />
+        )}
         {centralTab === 'surveillance' && (
           <CCTVGrid
             severity={sim.severityScore}
@@ -430,11 +475,29 @@ function CentralStage({ sim, crisisZones, centralTab, setCentralTab }) {
           />
         )}
         {centralTab === 'thermal' && (
-          <div className="h-full w-full flex flex-col items-center justify-center text-text-secondary">
-            <div className="text-[10px] uppercase tracking-[0.3em] text-accent-amber">Thermal imaging</div>
-            <div className="text-base mt-2">Module placeholder — coming in Phase 13.</div>
-            <div className="mt-4 text-[11px] max-w-md text-center">
-              Will overlay thermal heat-map data on top of the floor plan once IR cameras are integrated.
+          <ThermalGrid sim={sim} />
+        )}
+        {centralTab === 'multi' && (
+          <div className="h-full grid grid-cols-1 md:grid-cols-2">
+            <div className="border-r border-white/10 overflow-hidden">
+              <div className="px-3 py-1.5 border-b border-white/10 text-[10px] uppercase tracking-[0.3em] text-accent-blue bg-bg-primary/60">
+                Visible spectrum (CCTV)
+              </div>
+              <div className="h-[calc(100%-30px)]">
+                <CCTVGrid
+                  severity={sim.severityScore}
+                  evacuationActive={sim.evacuationActive}
+                  visionAgentActive
+                />
+              </div>
+            </div>
+            <div className="overflow-hidden">
+              <div className="px-3 py-1.5 border-b border-white/10 text-[10px] uppercase tracking-[0.3em] text-accent-amber bg-bg-primary/60">
+                Thermal infrared
+              </div>
+              <div className="h-[calc(100%-30px)] overflow-y-auto">
+                <ThermalGrid sim={sim} />
+              </div>
             </div>
           </div>
         )}
@@ -459,6 +522,9 @@ export default function App() {
   const [countdownActive, setCountdownActive] = useState(false)
   const [pendingScenario, setPendingScenario] = useState(null)
   const [centralTab, setCentralTab] = useState('floor')
+  const [mapMode, setMapMode] = useState('2d')
+  const [riskOpen, setRiskOpen] = useState(false)
+  const [connectivityOpen, setConnectivityOpen] = useState(false)
   const [demoVisible, setDemoVisible] = useState(true)
   const [presentationMode, setPresentationMode] = useState(false)
   const [statsVisible, setStatsVisible] = useState(true)
@@ -467,6 +533,7 @@ export default function App() {
     if (typeof window === 'undefined') return false
     try {
       if (window.location.hash.includes('skipIntro')) return false
+      if (window.location.search.includes('skipIntro')) return false
       return window.sessionStorage.getItem('crisisos:introSeen') !== '1'
     } catch { return true }
   })
@@ -539,6 +606,24 @@ export default function App() {
     [sim.crisisEvents, sim.activeFloor]
   )
 
+  const crisisFloor = useMemo(() => {
+    const ev = sim.crisisEvents.find((e) => e.severity === 'critical') || sim.crisisEvents[0]
+    return ev?.floor || null
+  }, [sim.crisisEvents])
+
+  // Auto-open risk monitor on first pre-alert
+  const preAlertSeenRef = useRef(false)
+  useEffect(() => {
+    if (sim.preAlertActive && !preAlertSeenRef.current) {
+      preAlertSeenRef.current = true
+      setRiskOpen(true)
+      setTimeout(() => setRiskOpen(false), 5500)
+    }
+    if (sim.simulationStatus === 'idle') {
+      preAlertSeenRef.current = false
+    }
+  }, [sim.preAlertActive, sim.simulationStatus])
+
   const isCrisis = sim.simulationStatus !== 'idle'
 
   const handleSensorClick = (sensor) => {
@@ -571,7 +656,12 @@ export default function App() {
         onOpenCompare={() => setCompareOpen(true)}
         drillMode={drillMode}
         onToggleDrill={() => setDrillMode(v => !v)}
+        sim={sim}
+        onOpenRisk={() => setRiskOpen(true)}
+        onOpenConnectivity={() => setConnectivityOpen(true)}
       />
+
+      <ConnectivityBanner banner={sim.connState.banner} />
 
       {drillMode && (
         <div className="relative z-10 flex items-center justify-center gap-3 px-6 py-2 border-b border-purple-500/30 bg-purple-500/15 text-purple-200 text-xs font-semibold uppercase tracking-[0.3em] shrink-0">
@@ -595,6 +685,9 @@ export default function App() {
           crisisZones={crisisZones}
           centralTab={centralTab}
           setCentralTab={setCentralTab}
+          mapMode={mapMode}
+          setMapMode={setMapMode}
+          crisisFloor={crisisFloor}
         />
         <RightPanel sim={sim} onStartScenario={handleStartScenario} />
         <div className="agent-orchestrator-panel">
@@ -688,6 +781,9 @@ export default function App() {
           try { window.sessionStorage.setItem('crisisos:introSeen', '1') } catch {}
         }}
       />
+
+      <RiskMonitor open={riskOpen} onClose={() => setRiskOpen(false)} sim={sim} />
+      <ConnectivityPanel open={connectivityOpen} onClose={() => setConnectivityOpen(false)} sim={sim} />
     </div>
   )
 }
