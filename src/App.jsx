@@ -11,6 +11,7 @@ import AccountabilityTracker from './components/AccountabilityTracker/Accountabi
 import ZoneCommunications from './components/ZoneCommunications/ZoneCommunications.jsx'
 import { useCrisisSimulation } from './hooks/useCrisisSimulation.js'
 import AgentOrchestrator from './components/AgentPanel/AgentOrchestrator.jsx'
+import IncidentReviewPanel from './components/IncidentReview/IncidentReviewPanel.jsx'
 
 function formatTime(d) {
   return d.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })
@@ -47,7 +48,7 @@ function deriveCrisisZones(crisisEvents, activeFloor) {
 }
 
 /* ── Header ───────────────────────────────────────────────────── */
-function Header({ time, date, status, elapsedSeconds, simulationStatus }) {
+function Header({ time, date, status, elapsedSeconds, simulationStatus, onOpenReview, reviewBadgeCount }) {
   const isCrisis  = status !== 'NOMINAL'
   const isRunning = simulationStatus === 'running' || simulationStatus === 'crisis'
 
@@ -80,6 +81,22 @@ function Header({ time, date, status, elapsedSeconds, simulationStatus }) {
 
       {/* Right */}
       <div className="flex items-center gap-4">
+        <button
+          onClick={onOpenReview}
+          className="flex items-center gap-2 px-3 py-1.5 rounded border border-accent-amber/40 bg-accent-amber/10 text-accent-amber text-xs font-semibold uppercase tracking-widest hover:bg-accent-amber/20 transition-colors"
+          title="Open incident timeline, audit log and metrics"
+        >
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <rect x="2" y="2" width="10" height="10" rx="1.5" stroke="currentColor" strokeWidth="1.4"/>
+            <path d="M7 4.5v3l2 1.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
+          </svg>
+          Incident Timeline
+          {reviewBadgeCount > 0 && (
+            <span className="ml-0.5 px-1.5 py-px rounded-full bg-accent-amber/30 text-[10px] font-mono text-accent-amber">
+              {reviewBadgeCount}
+            </span>
+          )}
+        </button>
         <div className="text-right">
           <div className="text-text-primary font-mono font-semibold text-base">{time}</div>
           <div className="text-text-secondary text-xs">{date}</div>
@@ -348,6 +365,7 @@ export default function App() {
   const [staffAssignments, setStaffAssignments] = useState([])
   const [zoneCommunications, setZoneCommunications] = useState([])
   const [dashboardTab, setDashboardTab] = useState('brief')
+  const [reviewOpen, setReviewOpen] = useState(false)
   const sim = useCrisisSimulation()
 
   useEffect(() => {
@@ -404,6 +422,8 @@ export default function App() {
         status={isCrisis ? 'CRISIS' : 'NOMINAL'}
         elapsedSeconds={sim.elapsedSeconds}
         simulationStatus={sim.simulationStatus}
+        onOpenReview={() => setReviewOpen(true)}
+        reviewBadgeCount={sim.incidentTimeline.length}
       />
 
       {/* Body */}
@@ -474,6 +494,12 @@ export default function App() {
           </div>
         </section>
       )}
+
+      <IncidentReviewPanel
+        open={reviewOpen}
+        onClose={() => setReviewOpen(false)}
+        sim={sim}
+      />
     </div>
   )
 }
