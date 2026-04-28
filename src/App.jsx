@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { EVACUATION_ROUTES } from './data/hotelData.js'
 import { ALL_SCENARIOS } from './data/crisisScenarios.js'
 import FloorMap from './components/FloorMap/FloorMap.jsx'
@@ -13,6 +13,8 @@ import { useCrisisSimulation } from './hooks/useCrisisSimulation.js'
 import AgentOrchestrator from './components/AgentPanel/AgentOrchestrator.jsx'
 import IncidentReviewPanel from './components/IncidentReview/IncidentReviewPanel.jsx'
 import BeforeAfterComparison from './components/Comparison/BeforeAfterComparison.jsx'
+import CountdownOverlay from './components/Countdown/CountdownOverlay.jsx'
+import { useCountUp } from './hooks/useCountUp.js'
 
 function formatTime(d) {
   return d.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })
@@ -141,6 +143,17 @@ function Header({ time, date, status, elapsedSeconds, simulationStatus, onOpenRe
   )
 }
 
+/* ── Animated stat tile (counts up/down) ──────────────────────── */
+function StatTile({ value, label, valueClass, flash }) {
+  const animated = useCountUp(value)
+  return (
+    <div className={`bg-bg-secondary p-3 ${flash ? 'beep-flash' : ''}`}>
+      <div className={`text-2xl font-bold tabular-nums ${valueClass}`}>{animated}</div>
+      <div className="text-text-secondary text-xs mt-0.5">{label}</div>
+    </div>
+  )
+}
+
 /* ── Sidebar ──────────────────────────────────────────────────── */
 function Sidebar({ sensors, staff, accountedGuests, crisisEvents, onSensorClick, selectedSensorId }) {
   const [activeTab, setActiveTab] = useState('sensors')
@@ -149,28 +162,29 @@ function Sidebar({ sensors, staff, accountedGuests, crisisEvents, onSensorClick,
   const availableStaff = staff.filter(s => s.status === 'available').length
   const alertCount     = crisisEvents.filter(e => !e.acknowledged).length
 
+  // Beep flash on Active Alerts when count increases
+  const prevAlertCount = useRef(alertCount)
+  const [alertFlash, setAlertFlash] = useState(false)
+  useEffect(() => {
+    if (alertCount > prevAlertCount.current) {
+      setAlertFlash(true)
+      const t = setTimeout(() => setAlertFlash(false), 750)
+      prevAlertCount.current = alertCount
+      return () => clearTimeout(t)
+    }
+    prevAlertCount.current = alertCount
+  }, [alertCount])
+
   const roleColor = { Security: 'text-accent-red', Medical: 'text-accent-green', Manager: 'text-accent-amber', Concierge: 'text-accent-blue', Housekeeping: 'text-text-secondary' }
 
   return (
     <aside className="w-[280px] flex flex-col panel border-r border-l-0 border-y-0 relative z-10 shrink-0">
       {/* Stats */}
       <div className="grid grid-cols-2 gap-px bg-white/5 border-b border-white/5 shrink-0">
-        <div className="bg-bg-secondary p-3">
-          <div className="text-2xl font-bold text-accent-green">{onlineCount}</div>
-          <div className="text-text-secondary text-xs mt-0.5">Sensors Online</div>
-        </div>
-        <div className="bg-bg-secondary p-3">
-          <div className="text-2xl font-bold text-accent-amber">{availableStaff}</div>
-          <div className="text-text-secondary text-xs mt-0.5">Staff Available</div>
-        </div>
-        <div className="bg-bg-secondary p-3">
-          <div className={`text-2xl font-bold ${accountedGuests < 251 ? 'text-accent-amber' : 'text-accent-blue'}`}>{accountedGuests}</div>
-          <div className="text-text-secondary text-xs mt-0.5">Guests Accounted</div>
-        </div>
-        <div className="bg-bg-secondary p-3">
-          <div className={`text-2xl font-bold ${alertCount > 0 ? 'text-accent-red' : 'text-text-secondary'}`}>{alertCount}</div>
-          <div className="text-text-secondary text-xs mt-0.5">Active Alerts</div>
-        </div>
+        <StatTile value={onlineCount}    label="Sensors Online"   valueClass="text-accent-green" />
+        <StatTile value={availableStaff} label="Staff Available"  valueClass="text-accent-amber" />
+        <StatTile value={accountedGuests} label="Guests Accounted" valueClass={accountedGuests < 251 ? 'text-accent-amber' : 'text-accent-blue'} />
+        <StatTile value={alertCount}     label="Active Alerts"    valueClass={alertCount > 0 ? 'text-accent-red' : 'text-text-secondary'} flash={alertFlash} />
       </div>
 
       {/* Tabs */}
@@ -395,7 +409,22 @@ export default function App() {
   const [reviewOpen, setReviewOpen] = useState(false)
   const [compareOpen, setCompareOpen] = useState(false)
   const [drillMode, setDrillMode] = useState(false)
+  const [countdownActive, setCountdownActive] = useState(false)
+  const [pendingScenario, setPendingScenario] = useState(null)
   const sim = useCrisisSimulation()
+
+  const handleStartScenario = useCallback((scenarioName) => {
+    setPendingScenario(scenarioName)
+    setCountdownActive(true)
+  }, [])
+
+  const handleCountdownComplete = useCallback(() => {
+    setCountdownActive(false)
+    if (pendingScenario) {
+      sim.startSimulation(pendingScenario)
+      setPendingScenario(null)
+    }
+  }, [pendingScenario, sim])
 
   useEffect(() => {
     const id = setInterval(() => {
@@ -487,7 +516,7 @@ export default function App() {
           activeFloor={sim.activeFloor}
           onFloorChange={sim.setActiveFloor}
         />
-        <RightPanel sim={sim} onStartScenario={sim.startSimulation} />
+        <RightPanel sim={sim} onStartScenario={handleStartScenario} />
         <AgentOrchestrator
           sim={sim}
           onBridgeBrief={(brief, raw) => { setBridgeBrief(brief); setBridgeRawJson(raw ?? '') }}
@@ -547,6 +576,11 @@ export default function App() {
       <BeforeAfterComparison
         open={compareOpen}
         onClose={() => setCompareOpen(false)}
+      />
+
+      <CountdownOverlay
+        active={countdownActive}
+        onComplete={handleCountdownComplete}
       />
     </div>
   )

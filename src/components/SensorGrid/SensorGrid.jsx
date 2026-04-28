@@ -1,4 +1,4 @@
-import React, { useCallback } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 
 /* ── Sensor icons (SVG) ──────────────────────────────────────── */
 function SmokeIcon() {
@@ -85,6 +85,19 @@ function SensorCard({ sensor, isSelected, onClick }) {
   const Icon = SENSOR_ICONS[sensor.type] ?? SmokeIcon
   const isCritical = sensor.sensorStatus === 'CRITICAL'
 
+  // Trigger a shake whenever this sensor *transitions into* CRITICAL
+  const prevStatus = useRef(sensor.sensorStatus)
+  const [shake, setShake] = useState(false)
+  useEffect(() => {
+    if (prevStatus.current !== 'CRITICAL' && sensor.sensorStatus === 'CRITICAL') {
+      setShake(true)
+      const t = setTimeout(() => setShake(false), 550)
+      prevStatus.current = sensor.sensorStatus
+      return () => clearTimeout(t)
+    }
+    prevStatus.current = sensor.sensorStatus
+  }, [sensor.sensorStatus])
+
   const formatVal = (v, type) => {
     if (type === 'smoke')       return v.toFixed(2)
     if (type === 'temperature') return Math.round(v)
@@ -104,6 +117,7 @@ function SensorCard({ sensor, isSelected, onClick }) {
         transition-all duration-300
         ${isSelected ? 'bg-accent-blue/20 border border-accent-blue/40' : 'bg-white/5 hover:bg-white/10 border border-transparent hover:border-white/10'}
         ${isCritical ? 'border-accent-red/50 crisis-pulse' : ''}
+        ${shake ? 'sensor-shake' : ''}
       `}
       title={`${sensor.id} · ${sensor.zone} · ${formatVal(sensor.currentValue, sensor.type)} ${sensor.unit}`}
     >

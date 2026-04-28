@@ -203,3 +203,78 @@ html, body, #root {
   background: rgba(255, 255, 255, 0.25);
   animation: speaker-wave 1.5s ease-out infinite;
 }
+
+/* ── Phase 8 polish ─────────────────────────────────────── */
+
+/* Shake — sensor cards entering critical */
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  10%, 30%, 50%, 70%, 90% { transform: translateX(-2px); }
+  20%, 40%, 60%, 80% { transform: translateX(2px); }
+}
+.sensor-shake { animation: shake 0.5s ease-in-out; }
+
+/* Beep flash — new alert pulse */
+@keyframes beep-flash {
+  0%   { background-color: rgba(239, 68, 68, 0.0); }
+  20%  { background-color: rgba(239, 68, 68, 0.35); box-shadow: 0 0 0 1px rgba(239,68,68,0.6) inset; }
+  100% { background-color: rgba(239, 68, 68, 0.0); }
+}
+.beep-flash { animation: beep-flash 0.7s ease-out; }
+
+/* CRT scanline overlay for floor map */
+.crt-scanlines {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(255, 255, 255, 0.03) 0px,
+    rgba(255, 255, 255, 0.03) 1px,
+    transparent 1px,
+    transparent 3px
+  );
+  mix-blend-mode: overlay;
+  border-radius: inherit;
+}
+.crt-scanlines::after {
+  content: '';
+  position: absolute;
+  left: 0; right: 0;
+  height: 90px;
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    rgba(56, 189, 248, 0.06) 45%,
+    rgba(56, 189, 248, 0.10) 50%,
+    rgba(56, 189, 248, 0.06) 55%,
+    transparent 100%
+  );
+  animation: crt-sweep 6s linear infinite;
+}
+@keyframes crt-sweep {
+  0%   { transform: translateY(-100%); }
+  100% { transform: translateY(2000%); }
+}
+
+/* Live red blinking dot */
+@keyframes live-blink {
+  0%, 60%, 100% { opacity: 1; box-shadow: 0 0 6px rgba(239, 68, 68, 0.9); }
+  70%, 90%      { opacity: 0.25; box-shadow: 0 0 0 rgba(239, 68, 68, 0); }
+}
+.live-dot {
+  width: 8px; height: 8px; border-radius: 9999px;
+  background: #ef4444;
+  animation: live-blink 1.4s ease-in-out infinite;
+}
+
+/* Countdown overlay — dramatic crisis init */
+@keyframes countdown-pop {
+  0%   { transform: scale(0.4); opacity: 0; }
+  20%  { transform: scale(1.15); opacity: 1; }
+  80%  { transform: scale(1); opacity: 1; }
+  100% { transform: scale(0.85); opacity: 0; }
+}
+.countdown-num {
+  animation: countdown-pop 1s ease-out forwards;
+}

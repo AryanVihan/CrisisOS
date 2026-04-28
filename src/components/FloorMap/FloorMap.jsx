@@ -697,6 +697,10 @@ export default function FloorMap({
     <main className="flex-1 flex flex-col relative z-10 overflow-hidden">
       {/* ── Floor selector tabs ── */}
       <div className="flex items-center gap-1.5 px-4 py-2.5 border-b border-white/5 bg-bg-secondary/50 shrink-0">
+        <div className="flex items-center gap-2 mr-3">
+          <span className="live-dot" />
+          <span className="text-accent-red text-[10px] font-bold uppercase tracking-[0.25em]">LIVE</span>
+        </div>
         <span className="text-text-secondary text-xs font-semibold uppercase tracking-widest mr-2">FLOOR</span>
         {FLOORS.map(floor => (
           <button
@@ -727,8 +731,9 @@ export default function FloorMap({
 
       {/* ── SVG map ── */}
       <div className="flex-1 overflow-hidden p-3">
-        <div className="w-full h-full rounded-xl overflow-hidden border border-white/[0.07]"
+        <div className="relative w-full h-full rounded-xl overflow-hidden border border-white/[0.07]"
           style={{ background: '#05080f' }}>
+          <span className="crt-scanlines" />
           <svg
             viewBox={`0 0 ${VW} ${VH}`}
             width="100%"
