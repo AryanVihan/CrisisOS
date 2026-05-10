@@ -1,8 +1,7 @@
-// Live LLM streaming is intentionally disabled in this build — calling the
-// Anthropic API directly from the browser would expose the API key. The
-// app falls back to the curated narratives below, which keep the demo flow
-// fully functional without any external service.
-const client = null
+// Live LLM calls are routed through a backend endpoint so API keys stay off
+// the client. If the endpoint is unavailable, we gracefully fall back to
+// curated responses to keep the demo flow reliable.
+const AGENT_API_ENDPOINT = import.meta.env.VITE_GEMINI_ENDPOINT || '/api/gemini-agent'
 
 // ── Fallback responses ─────────────────────────────────────────────────────
 
@@ -70,22 +69,23 @@ const FALLBACK_BRIDGE = `{
   "floorPlanNote": "Full digital floor plans transmitted via CrisisOS secure channel. Physical laminated copies at main reception desk, drawer 2. Elevator shaft positions marked — all isolated. Sprinkler zone map available on-site."
 }`
 
-// ── Stream helper ──────────────────────────────────────────────────────────
-
-async function streamResponse(system, userMessage, onToken, signal) {
-  let fullText = ''
-  const stream = await client.messages.create(
-    { model: MODEL, max_tokens: 900, stream: true, system, messages: [{ role: 'user', content: userMessage }] },
-    { signal }
-  )
-  for await (const event of stream) {
-    if (signal?.aborted) break
-    if (event.type === 'content_block_delta' && event.delta?.type === 'text_delta') {
-      onToken(event.delta.text)
-      fullText += event.delta.text
-    }
+// ── API + stream helpers ───────────────────────────────────────────────────
+async function callGeminiAgent(agent, payload, signal) {
+  const res = await fetch(AGENT_API_ENDPOINT, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ agent, payload }),
+    signal,
+  })
+  if (!res.ok) {
+    const errBody = await res.text().catch(() => '')
+    throw new Error(`Gemini agent error: ${res.status} ${errBody}`)
   }
-  return fullText
+  const data = await res.json()
+  if (!data?.text || typeof data.text !== 'string') {
+    throw new Error('Gemini agent returned invalid payload')
+  }
+  return data.text
 }
 
 async function simulateStream(text, onToken, signal, chunkSize = 3, delayMs = 18) {
@@ -127,12 +127,11 @@ ${sensorLines || 'All sensors nominal.'}
 
 Provide your incident assessment now.`
 
-  if (!client) return simulateStream(FALLBACK_DETECTION, onToken, signal)
-
   try {
-    return await streamResponse(DETECTION_SYSTEM, userMessage, onToken, signal)
+    const text = await callGeminiAgent('detection', { system: DETECTION_SYSTEM, userMessage }, signal)
+    return simulateStream(text, onToken, signal)
   } catch (err) {
-    if (err.name === 'AbortError') return ''
+    if (err?.name === 'AbortError') return ''
     return simulateStream(FALLBACK_DETECTION, onToken, signal)
   }
 }
@@ -166,12 +165,11 @@ ${routeLines}
 
 Generate the coordinated response plan now.`
 
-  if (!client) return simulateStream(FALLBACK_COORDINATION, onToken, signal)
-
   try {
-    return await streamResponse(COORDINATION_SYSTEM, userMessage, onToken, signal)
+    const text = await callGeminiAgent('coordination', { system: COORDINATION_SYSTEM, userMessage }, signal)
+    return simulateStream(text, onToken, signal)
   } catch (err) {
-    if (err.name === 'AbortError') return ''
+    if (err?.name === 'AbortError') return ''
     return simulateStream(FALLBACK_COORDINATION, onToken, signal)
   }
 }
@@ -195,12 +193,11 @@ Staff count: ${hotelData.staff?.length ?? 0}
 
 Generate the emergency services JSON brief now. Output JSON only.`
 
-  if (!client) return simulateStream(FALLBACK_BRIDGE, onToken, signal, 2, 12)
-
   try {
-    return await streamResponse(BRIDGE_SYSTEM, userMessage, onToken, signal)
+    const text = await callGeminiAgent('bridge', { system: BRIDGE_SYSTEM, userMessage }, signal)
+    return simulateStream(text, onToken, signal, 2, 12)
   } catch (err) {
-    if (err.name === 'AbortError') return ''
+    if (err?.name === 'AbortError') return ''
     return simulateStream(FALLBACK_BRIDGE, onToken, signal, 2, 12)
   }
 }
